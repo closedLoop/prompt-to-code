@@ -1,0 +1,4 @@
+.git
+env
+htmlcov
+prompt_to_code.egg-info

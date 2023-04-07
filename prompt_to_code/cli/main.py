@@ -4,7 +4,7 @@ from pprint import pprint
 import pyfiglet
 import typer
 
-from prompt_to_code.agent import process_prompt
+from prompt_to_code.agent import run
 from prompt_to_code.config import PromptToCodeConfig
 from prompt_to_code.version import VERSION
 
@@ -20,8 +20,9 @@ def banner():
 
 @app.callback(invoke_without_command=True)
 def main(
-    output_directory: str
-    | None = typer.Option(None, help="The directory to output the code to")
+    output_directory: str = typer.Option(
+        None, help="The directory to output the code to"
+    )
 ):
     """This can be used to update the configuration via the CLI to override the default values."""
     global config
@@ -33,18 +34,14 @@ def main(
 @app.command()
 def code(
     prompt: str = typer.Argument(..., help="The prompt to generate code from"),
-    language: str
-    | None = typer.Argument("python3", help="The language to generate code in"),
-    agent: str
-    | None = typer.Argument(
+    language: str = typer.Argument("python3", help="The language to generate code in"),
+    agent: str = typer.Argument(
         "default", help="The type of behavior used to generate code"
     ),
 ):
     """Generate code from a prompt and save it to files."""
     global config
-    results = process_prompt(
-        prompt, language=language or "python3", agent=agent, config=config
-    )
+    results = run(prompt, language=language or "python3", agent=agent, config=config)
     typer.echo(results)
 
 

@@ -8,6 +8,7 @@ import glob
 import json
 import re
 import signal
+import sys
 import time
 import traceback
 from pathlib import Path
@@ -369,8 +370,11 @@ def run(agent="tdd", num_samples_per_task=200, outdir="./examples/human_eval"):
     run_human_eval(
         agent="tdd", outdir=outdir, num_samples_per_task=num_samples_per_task
     )
-    aggregate_outputs(outdir=outdir)
+    score(num_samples_per_task, outdir)
 
+
+def score(num_samples_per_task, outdir):
+    aggregate_outputs(outdir=outdir)
     # Eval
     k = [1, 2, 3, 4, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
     results = eval_tests(
@@ -386,9 +390,13 @@ def run(agent="tdd", num_samples_per_task=200, outdir="./examples/human_eval"):
 
 if __name__ == "__main__":
     agent = "tdd"
-    outdir = f"./examples/human_eval_{agent}"
+    outdir = Path(f"./examples/human_eval_{agent}")
 
     print("Running human eval for agent", agent)
     print("saving output to {outdir}")
     print("WARNING THIS WILL COST $$$, please monitor OPENAI bill")
-    run(agent=agent, outdir=outdir, num_samples_per_task=1)
+    print("os.argv", sys.argv)
+    if do_score := len(sys.argv) > 1:
+        score(num_samples_per_task=1, outdir=outdir)
+    else:
+        run(agent=agent, outdir=outdir, num_samples_per_task=1)

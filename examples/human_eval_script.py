@@ -16,8 +16,9 @@ import tqdm
 from langchain.chat_models import ChatOpenAI
 
 from create_branch import GitBranchCRUD
-from prompt_to_code.agents.agent_tdd import (
+from prompt_to_code.agents.prompts import (
     ERROR_PROMPT,
+    FUNCTION_MENTION,
     FUNCTIONS_SECTION,
     GREEN_STEP_PROMPT,
     RED_STEP_PROMPT,
@@ -78,19 +79,23 @@ def run_agent(agent, name, filename, task: str):
     llm = ChatOpenAI(**default_llm)
 
     # Run the steps
-    _stub_code, functions = stub_step(filename, task, llm, name=name)
-    test_code, test_results = red_step(filename, task, llm, functions, name=name)
+    _stub_code, functions_section = stub_step(filename, task, llm, name=name)
+    test_code, test_results = red_step(
+        filename, task, llm, functions_section, name=name
+    )
     test_results, failed = green_step(
-        filename, task, llm, functions, test_code, test_results, name=name
+        filename, task, llm, functions_section, test_code, test_results, name=name
     )
     # TODO: REFACTOR STEP
     print(test_results, failed)
 
 
-def green_step(filename, task, llm, functions, test_code, test_results, name="tdd"):
+def green_step(
+    filename, task, llm, functions_section, test_code, test_results, name="tdd"
+):
     print("GREEN STEP")
     prompt = GREEN_STEP_PROMPT.format(
-        functions_section=FUNCTIONS_SECTION.format(functions=functions),
+        functions_section=functions_section,
         filename=filename,
         prompt=task,
         examples="",
@@ -104,7 +109,16 @@ def green_step(filename, task, llm, functions, test_code, test_results, name="td
         call_llm(llm, prompt, prefix="human-eval-green", log_dir=f"./logs/{name}")
     )
     # Run the code to see if it compiles
-    code = run_and_fix(llm, code, max_tries=2, timeout=5, name=name)
+    code = run_and_fix(
+        llm,
+        code,
+        max_tries=2,
+        timeout=5,
+        name=name,
+        functions_section=functions_section,
+        filename=filename,
+        prompt=task,
+    )
 
     # Save file
     if not filename.parent.exists():
@@ -119,11 +133,11 @@ def green_step(filename, task, llm, functions, test_code, test_results, name="td
     return test_results, failed
 
 
-def red_step(filename, task, llm, functions, name="tdd"):
+def red_step(filename, task, llm, functions_section: str, name="tdd"):
     print("RED STEP")
     prompt = RED_STEP_PROMPT.format(
         test_library="pytest",
-        functions_section=FUNCTIONS_SECTION.format(functions=functions),
+        functions_section=functions_section,
         filename=filename,
         prompt=task,
         examples="",
@@ -135,7 +149,16 @@ def red_step(filename, task, llm, functions, name="tdd"):
         call_llm(llm, prompt, prefix="human-eval-red", log_dir=f"./logs/{name}")
     )
     # Run the code to see if it compiles
-    test_code = run_and_fix(llm, test_code, max_tries=2, timeout=5, name=name)
+    test_code = run_and_fix(
+        llm,
+        test_code,
+        max_tries=2,
+        timeout=5,
+        name=name,
+        functions_section=functions_section,
+        filename=filename,
+        prompt=task,
+    )
 
     # Save file
     test_filename = filename.parent / f"tests/test_{filename.name}"
@@ -148,10 +171,10 @@ def red_step(filename, task, llm, functions, name="tdd"):
     return test_code, test_results
 
 
-def stub_step(filename, task, llm, name="tdd"):
+def stub_step(filename, task, llm, name="tdd", functions_section="") -> tuple[str, str]:
     print("STUB STEP")
     prompt = STUB_STEP_PROMPT.format(
-        functions_section="", filename=filename, prompt=task, examples=""
+        functions_section=functions_section, filename=filename, prompt=task, examples=""
     )
     prompt = re.sub(r"\n\n\n([\n]+)", "\n\n\n", prompt)
     # generate code
@@ -159,17 +182,45 @@ def stub_step(filename, task, llm, name="tdd"):
         call_llm(llm, prompt, prefix="human-eval-stub", log_dir=f"./logs/{name}")
     )
     # Run the code to see if it compiles
-    stub_code = run_and_fix(llm, stub_code, max_tries=2, timeout=5, name=name)
+    stub_code = run_and_fix(
+        llm,
+        stub_code,
+        max_tries=2,
+        timeout=5,
+        name=name,
+        functions_section=functions_section,
+        filename=filename,
+        prompt=task,
+    )
 
     result, failed = save_and_run_code(filename, stub_code, "python")
 
-    function_data, _g = extract_function_definitions(stub_code)
-    functions = "\n".join([f"{f.definition}\n" for f in function_data])
+    functions_section = create_function_list_for_prompts(filename, stub_code)
 
     # TODO add usages to the function definitions
     if failed:
         print(f"Failed to run the code: {result}")
-    return stub_code, functions
+    return stub_code, functions_section
+
+
+def create_function_list_for_prompts(filename, stub_code) -> str:
+    function_data, _g = extract_function_definitions(
+        stub_code, filename=filename, branch=None
+    )
+    functions = [FUNCTIONS_SECTION]
+    # TODO add common usages to docstring
+    # TODO dynamic language
+    for f in function_data:
+        fn = FUNCTION_MENTION.format(
+            filename=f.filename,
+            name=f.name,
+            language="python",
+            definition=f.definition,
+            docstring="\n    ...",
+        )
+        functions.append(fn + "\n")
+
+    return "\n".join(functions) + "\n" if len(functions) > 1 else ""
 
 
 def save_and_run_code(filename: Path, code, command) -> tuple[str, bool]:
@@ -193,7 +244,17 @@ def timeout_handler_wrapper(timeout=5):
     return timeout_handler
 
 
-def run_and_fix(llm, code, max_tries=3, timeout=5, count=0, name="tdd"):
+def run_and_fix(
+    llm,
+    code,
+    max_tries=2,
+    timeout=5,
+    count=0,
+    name="tdd",
+    functions_section: str = "",
+    filename: str = "",
+    prompt: str = "",
+):
     if count >= max_tries:
         return code
 
@@ -218,15 +279,30 @@ def run_and_fix(llm, code, max_tries=3, timeout=5, count=0, name="tdd"):
     if tb_str is None:
         return code
 
-    new_prompt = ERROR_PROMPT.format(error="".join(tb_str), code=code)
-    code = llm.call_as_llm(new_prompt)
+    new_prompt = ERROR_PROMPT.format(
+        functions_section=functions_section,
+        filename=filename,
+        prompt=prompt,
+        examples="",
+        error="".join(tb_str),
+        code=code,
+    )
+
     code = extract_code_from_response(
         call_llm(
             llm, new_prompt, prefix=f"human-eval-fix-{count}", log_dir=f"./logs/{name}"
         )
     )
     return run_and_fix(
-        llm, code, max_tries=max_tries, timeout=timeout, count=count + 1, name=name
+        llm,
+        code,
+        max_tries=max_tries,
+        timeout=timeout,
+        count=count + 1,
+        name=name,
+        functions_section=functions_section,
+        filename=filename,
+        prompt=prompt,
     )
 
 
@@ -236,16 +312,13 @@ def run_human_eval(
     problems = read_problems(HUMAN_EVAL)
     outdir = Path(outdir)
     ittr = tqdm.tqdm(total=len(problems) * num_samples_per_task)
-    for i, example in enumerate(problems):
+    for i, example in enumerate(problems.values()):
         for loop_cnt in range(num_samples_per_task):
             filename = outdir / f"human_eval_{i:04}_{loop_cnt:04}.py"
             name = example["task_id"]
             prompt = example["prompt"]
-            try:
-                run_agent(agent, name, filename, prompt)
-            except Exception as e:
-                print(f"Failed to run example {name}: {e}")
-                traceback.print_exc()
+
+            run_agent(agent, name, filename, prompt)
             ittr.update(1)
 
 
@@ -313,7 +386,7 @@ def run(agent="tdd", num_samples_per_task=200, outdir="./examples/human_eval"):
 
 if __name__ == "__main__":
     agent = "tdd"
-    outdir = "./examples/human_eval" or f"./examples/human_eval_{agent}"
+    outdir = f"./examples/human_eval_{agent}"
 
     print("Running human eval for agent", agent)
     print("saving output to {outdir}")

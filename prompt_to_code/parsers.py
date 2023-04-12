@@ -4,21 +4,21 @@ from collections import defaultdict
 
 import networkx as nx
 
-from prompt_to_code.agents.agent_tdd import AvailableMethods
+from prompt_to_code.agents.models import AvailableMethods
 
 
 class FunctionExtractor(ast.NodeVisitor):
     def __init__(
         self,
         source_lines,
-        file_name=None,
+        filename=None,
         branch=None,
         usages: dict[str, dict[str, list[tuple[str, int]]]] | None = None,
     ):
         super().__init__()
         self.function_data: list[AvailableMethods] = []
         self.source_lines = source_lines
-        self.file_name = file_name
+        self.filename = filename
         self.branch = branch
         self.usages = usages
 
@@ -32,9 +32,7 @@ class FunctionExtractor(ast.NodeVisitor):
 
         start_line = node.lineno - 1
         end_line = node.body[0].lineno - 1
-        function_source = (
-            "".join(self.source_lines[start_line:end_line]) + "    ...".strip()
-        )
+        function_source = "".join(self.source_lines[start_line:end_line]).strip()
 
         start_line = node.lineno - 1
         end_line = node.end_lineno
@@ -49,7 +47,7 @@ class FunctionExtractor(ast.NodeVisitor):
                 description=None,
                 parameters=(args, kwargs),
                 return_type=return_type,
-                file_name=self.file_name,
+                filename=str(self.filename),
                 branch=self.branch,
                 code_hash=code_hash,
                 embedding=None,
@@ -127,14 +125,16 @@ def build_usages_from_graph(G):
     }
 
 
-def extract_function_definitions(content) -> tuple[list[AvailableMethods], nx.DiGraph]:
+def extract_function_definitions(
+    content, filename=None, branch=None
+) -> tuple[list[AvailableMethods], nx.DiGraph]:
     G = create_function_call_graph(content)
     usages = build_usages_from_graph(G)
 
     source_lines = content.splitlines(True)
     tree = ast.parse(content)
     extractor = FunctionExtractor(
-        source_lines, file_name=None, branch=None, usages=usages
+        source_lines, filename=filename, branch=branch, usages=usages
     )
     extractor.visit(tree)
 

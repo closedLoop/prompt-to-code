@@ -28,13 +28,13 @@ class FileLoggerConfig:
     enabled: bool = False
     maxBytes: int = 1000000
     backupCount: int = 5
-    file_name: str | None = None
+    filename: str | None = None
     log_directory: str | Path | None = None
 
     def __post_init__(self):
-        if self.file_name is None:
+        if self.filename is None:
             if self.enabled:
-                self.file_name = "prompt-to-code.log"
+                self.filename = "prompt-to-code.log"
         else:
             self.enabled = True
 
@@ -64,7 +64,7 @@ def make_file_handler(config: FileLoggerConfig) -> logging.FileHandler:
         os.makedirs(config.log_directory, exist_ok=True)
 
     file_handler = RotatingFileHandler(
-        config.log_directory / config.file_name,
+        config.log_directory / config.filename,
         maxBytes=config.maxBytes,
         backupCount=config.backupCount,
     )

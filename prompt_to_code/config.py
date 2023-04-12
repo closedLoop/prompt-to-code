@@ -34,9 +34,7 @@ class PromptToCodeConfig:
             backupCount=int(
                 os.environ.get("P2C_LOGFILE_BACKUP_COUNT", FileLoggerConfig.backupCount)
             ),
-            file_name=os.environ.get(
-                "P2C_LOGFILE_FILE_NAME", FileLoggerConfig.file_name
-            ),
+            filename=os.environ.get("P2C_LOGFILE_FILE_NAME", FileLoggerConfig.filename),
             log_directory=os.environ.get(
                 "P2C_LOGFILE_DIRECTORY", FileLoggerConfig.log_directory
             ),

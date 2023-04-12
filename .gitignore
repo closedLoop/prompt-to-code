@@ -130,3 +130,4 @@ dmypy.json
 
 .vscode
 /examples/human_eval/
+/examples/human_eval_*

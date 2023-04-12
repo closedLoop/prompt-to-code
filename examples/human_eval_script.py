@@ -4,6 +4,7 @@ Dataset from: https://github.com/openai/human-eval/tree/master
 Paper: https://arxiv.org/pdf/2107.03374.pdf
 """
 
+import glob
 import json
 import re
 import signal
@@ -23,6 +24,20 @@ from prompt_to_code.agents.agent_tdd import (
     STUB_STEP_PROMPT,
 )
 from prompt_to_code.parsers import extract_function_definitions
+
+# requires human-eval is installed
+# Also need to un-comment out the 'eval' function
+try:
+    from human_eval.evaluation import evaluate_functional_correctness
+except ImportError:
+    print("=" * 80)
+    print("Install human-eval from: https://github.com/openai/human-eval")
+    print("$ git clone https://github.com/openai/human-eval")
+    print("$ pip install -e human-eval")
+    print("Then uncomment the import statement from /human_eval/execution.py")
+    print("```#                         exec(check_program, exec_globals)```")
+    print("=" * 80)
+    raise ImportError("human-eval required")
 
 
 def load_human_eval_dataset():
@@ -219,16 +234,87 @@ def run_and_fix(llm, code, max_tries=3, timeout=5, count=0, name="tdd"):
     )
 
 
-if __name__ == "__main__":
+def run_human_eval(num_samples_per_task=1):
     dataset = load_human_eval_dataset()
 
-    for i, example in tqdm.tqdm(enumerate(dataset)):
-        filename = Path(f"examples/human_eval/human_eval_{i:04}.py")
-        name = example["task_id"]
-        prompt = example["prompt"]
+    ittr = tqdm.tqdm(total=len(dataset) * num_samples_per_task)
+    for i, example in enumerate(dataset):
+        for loop_cnt in range(num_samples_per_task):
+            filename = Path(f"examples/human_eval/human_eval_{i:04}_{loop_cnt:04}.py")
+            name = example["task_id"]
+            prompt = example["prompt"]
+            try:
+                run_example(name, filename, prompt)
+            except Exception as e:
+                print(f"Failed to run example {name}: {e}")
+                traceback.print_exc()
+            ittr.update(1)
 
-        try:
-            run_example(name, filename, prompt)
-        except Exception as e:
-            print(f"Failed to run example {name}: {e}")
-            traceback.print_exc()
+
+def aggregate_outputs(outdir: Path | str = "examples/human_eval"):
+    pattern = str(Path(outdir) / "human_eval_*.py")
+    results = []
+    task_ids = set()
+    for fname in glob.glob(pattern):
+        code = Path(fname).read_text()
+
+        s = fname.split("examples/human_eval/human_eval_")[1].split(".py")[0]
+        if "_" in s:
+            task_number, *_ = s.split("_")
+        else:
+            task_number = s
+        task_id = f"HumanEval/{int(task_number)}"
+        task_ids.add(task_id)
+        results.append({"task_id": task_id, "completion": code})
+    with open("examples/human_eval/human_eval_samples.jsonl", "w") as f:
+        for problem in results:
+            f.write(json.dumps(problem) + "\n")
+
+    dataset = load_human_eval_dataset()
+    with open("examples/human_eval/human_eval_problems.jsonl", "w") as f:
+        for problem in dataset:
+            if problem["task_id"] in task_ids:
+                f.write(json.dumps(problem) + "\n")
+
+
+def eval_tests(
+    outdir="./examples/human_eval",
+    k: list[int] | None = None,
+    n_workers: int = 4,
+    timeout: float = 3.0,
+):
+    if k is None:
+        k = [1]
+    outdir = Path(outdir)
+    sample_file = outdir / "human_eval_samples.jsonl"
+    problem_file = outdir / "human_eval_problems.jsonl"
+    return evaluate_functional_correctness(
+        str(sample_file), k, n_workers, timeout, str(problem_file)
+    )
+
+
+def run(agent="tdd", num_samples_per_task=200, outdir="./examples/human_eval"):
+    outdir = Path(outdir)
+    aggregate_outputs(outdir=outdir)
+
+    # Eval
+    k = [1, 2, 3, 4, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    results = eval_tests(
+        outdir=outdir,
+        k=[i for i in k if i <= num_samples_per_task],
+        n_workers=4,
+        timeout=3,
+    )
+    print(results)
+    with open(outdir / "human_eval_results.json", "w") as f:
+        json.dump(results, f)
+
+
+if __name__ == "__main__":
+    agent = "tdd"
+    outdir = "./examples/human_eval" or f"./examples/human_eval_{agent}"
+
+    print("Running human eval for agent", agent)
+    print("saving output to {outdir}")
+    print("WARNING THIS WILL COST $$$, please monitor OPENAI bill")
+    run(agent=agent, outdir=outdir, num_samples_per_task=1)

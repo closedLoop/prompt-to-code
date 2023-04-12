@@ -30,13 +30,7 @@ class TaskDefinition(BaseModel):
     ] = []  # A list of functions that can be used to solve the task
 
 
-ERROR_PROMPT = """Running the code raises the following error, please provide a brief description of the likely solution and the corrected code fix it in markdown format.
-
-# DESCRIPTION
-write description here
-
-# CODE
-corrected code here
+ERROR_PROMPT = """Running the code raises the following error, please only the corrected code.  Include any descriptions in comments.
 
 ERROR:
 {error}
@@ -44,7 +38,7 @@ ERROR:
 BROKEN CODE:
 {code}
 
-# DESCRIPTION
+CORRECTED CODE:
 """
 
 
@@ -72,7 +66,7 @@ STUB FILE:
 RED_STEP_PROMPT = """
 You are a developer who strictly follows test-driven development best practices and uses the Red-Green-Refactor loop.
 
-Given the following code prompt implement a failing test using `{test_library}`.
+Given the following code prompt implement a failing test using `{test_library}`.  The CODE section below should include only the test code and not the function implementation.
 
 {functions_section}
 
@@ -83,13 +77,13 @@ PROMPT:
 
 {examples}
 
-TESTS:
+TESTS (excluding function implementations):
 """.lstrip()
 
 GREEN_STEP_PROMPT = """
 You are a developer who strictly follows test-driven development best practices and uses the Red-Green-Refactor loop.
 
-Given the following code prompt and failing test, implement the functions to pass the tests.
+Given the following code prompt and failing test, implement the functions to pass the tests.  The CODE section below should NOT include the test code.
 
 {functions_section}
 
@@ -106,7 +100,7 @@ TESTS:
 FAILED TESTS MESSAGE:
 {test_errors}
 
-CODE:
+CODE (excluding tests):
 """.lstrip()
 
 

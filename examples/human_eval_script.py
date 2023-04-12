@@ -11,6 +11,7 @@ import time
 import traceback
 from pathlib import Path
 
+import tqdm
 from langchain.chat_models import ChatOpenAI
 
 from create_branch import GitBranchCRUD
@@ -210,7 +211,7 @@ def run_and_fix(llm, code, max_tries=3, timeout=5, count=0, name="tdd"):
     code = llm.call_as_llm(new_prompt)
     code = extract_code_from_response(
         call_llm(
-            llm, new_prompt, prefix=f"human-eval-fix-{count}", log_dir="./logs/{name}"
+            llm, new_prompt, prefix=f"human-eval-fix-{count}", log_dir=f"./logs/{name}"
         )
     )
     return run_and_fix(
@@ -221,7 +222,7 @@ def run_and_fix(llm, code, max_tries=3, timeout=5, count=0, name="tdd"):
 if __name__ == "__main__":
     dataset = load_human_eval_dataset()
 
-    for i, example in enumerate(dataset):
+    for i, example in tqdm.tqdm(enumerate(dataset)):
         filename = Path(f"examples/human_eval/human_eval_{i:04}.py")
         name = example["task_id"]
         prompt = example["prompt"]

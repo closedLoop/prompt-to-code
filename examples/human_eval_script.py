@@ -28,6 +28,7 @@ from prompt_to_code.parsers import extract_function_definitions
 # requires human-eval is installed
 # Also need to un-comment out the 'eval' function
 try:
+    from human_eval.data import HUMAN_EVAL, read_problems
     from human_eval.evaluation import evaluate_functional_correctness
 except ImportError:
     print("=" * 80)
@@ -38,14 +39,6 @@ except ImportError:
     print("```#                         exec(check_program, exec_globals)```")
     print("=" * 80)
     raise ImportError("human-eval required")
-
-
-def load_human_eval_dataset():
-    """Load the human evaluation dataset"""
-    # Load the dataset
-    with open("examples/human-eval-v2-20210705.jsonl") as f:
-        dataset = [json.loads(l) for l in f.readlines()]
-    return dataset
 
 
 def extract_code_from_response(r) -> str:
@@ -72,8 +65,11 @@ def call_llm(llm, prompt, prefix="any", log_dir="./logs"):
     return result
 
 
-def run_example(name, filename, task):
-    print(f"Running: {name}")
+def run_agent(agent, name, filename, task: str):
+    if agent != "tdd":
+        raise NotImplementedError(f"Agent {agent} not implemented")
+
+    print(f"Running {agent}: {name}")
     default_llm = {
         "temperature": 0.2,
         "model_name": "gpt-4",
@@ -234,31 +230,33 @@ def run_and_fix(llm, code, max_tries=3, timeout=5, count=0, name="tdd"):
     )
 
 
-def run_human_eval(num_samples_per_task=1):
-    dataset = load_human_eval_dataset()
-
-    ittr = tqdm.tqdm(total=len(dataset) * num_samples_per_task)
-    for i, example in enumerate(dataset):
+def run_human_eval(
+    agent="tdd", outdir: Path | str = "./examples/human_eval", num_samples_per_task=1
+):
+    problems = read_problems(HUMAN_EVAL)
+    outdir = Path(outdir)
+    ittr = tqdm.tqdm(total=len(problems) * num_samples_per_task)
+    for i, example in enumerate(problems):
         for loop_cnt in range(num_samples_per_task):
-            filename = Path(f"examples/human_eval/human_eval_{i:04}_{loop_cnt:04}.py")
+            filename = outdir / f"human_eval_{i:04}_{loop_cnt:04}.py"
             name = example["task_id"]
             prompt = example["prompt"]
             try:
-                run_example(name, filename, prompt)
+                run_agent(agent, name, filename, prompt)
             except Exception as e:
                 print(f"Failed to run example {name}: {e}")
                 traceback.print_exc()
             ittr.update(1)
 
 
-def aggregate_outputs(outdir: Path | str = "examples/human_eval"):
+def aggregate_outputs(outdir: Path | str = "./examples/human_eval"):
     pattern = str(Path(outdir) / "human_eval_*.py")
     results = []
     task_ids = set()
     for fname in glob.glob(pattern):
         code = Path(fname).read_text()
 
-        s = fname.split("examples/human_eval/human_eval_")[1].split(".py")[0]
+        s = fname.split(str(outdir / "human_eval_"))[1].split(".py")[0]
         if "_" in s:
             task_number, *_ = s.split("_")
         else:
@@ -266,13 +264,13 @@ def aggregate_outputs(outdir: Path | str = "examples/human_eval"):
         task_id = f"HumanEval/{int(task_number)}"
         task_ids.add(task_id)
         results.append({"task_id": task_id, "completion": code})
-    with open("examples/human_eval/human_eval_samples.jsonl", "w") as f:
+    with open(outdir / "human_eval_samples.jsonl", "w") as f:
         for problem in results:
             f.write(json.dumps(problem) + "\n")
 
-    dataset = load_human_eval_dataset()
-    with open("examples/human_eval/human_eval_problems.jsonl", "w") as f:
-        for problem in dataset:
+    problems = read_problems(HUMAN_EVAL)
+    with open(outdir / "human_eval_problems.jsonl", "w") as f:
+        for problem in problems.values():
             if problem["task_id"] in task_ids:
                 f.write(json.dumps(problem) + "\n")
 
@@ -295,6 +293,9 @@ def eval_tests(
 
 def run(agent="tdd", num_samples_per_task=200, outdir="./examples/human_eval"):
     outdir = Path(outdir)
+    run_human_eval(
+        agent="tdd", outdir=outdir, num_samples_per_task=num_samples_per_task
+    )
     aggregate_outputs(outdir=outdir)
 
     # Eval

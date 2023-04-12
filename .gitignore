@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 
 .vscode
+/examples/human_eval/

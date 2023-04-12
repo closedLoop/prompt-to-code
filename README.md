@@ -48,9 +48,11 @@ On Windows, use the following command instead:
     # Install the pre-commit hooks
     pre-commit install --install-hooks
 
-    # Install the gitmoji cli tool - https://github.com/carloscuesta/gitmoji-cli
-    npm i -g gitmoji-cli
-    gitmoji -i
+    # Install the Opencommit
+    npm install -g opencommit
+    opencommit config set OPENAI_API_KEY=<your_api_key>opencommit     opencommit config set emoji=true
+    opencommit config set description=true
+    opencommit hook set
 
 
 ## Running the Test Suite

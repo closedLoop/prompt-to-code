@@ -17,7 +17,7 @@ def _reflection_wrapper(
 
     prompt = PromptTemplate(
         input_variables=["input"],
-        template="""{input}\n now determin the single next best action to take, should be one of the specified tools.  Format your response as follows:\nAction: tool_name\nAction Input: formatted input for the tool""",
+        template="""{input}\n now determine the single next best action to take, should be one of the specified tools.  Format your response as follows:\nAction: tool_name\nAction Input: formatted input for the tool""",
     )
     chain = LLMChain(llm=llm, prompt=prompt)
     return chain.run

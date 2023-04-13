@@ -38,7 +38,7 @@ repos:
      name: vulture
      description: Find dead Python code
      entry: vulture
-     args: ["--min-confidence", "80", "--exclude", "env,examples/human_eval", "."]
+     args: ["--min-confidence", "80", "--exclude", "env,examples/human_eval,examples/leetcode_results", "."]
      language: system
      types: [python]
  - repo: https://github.com/PyCQA/autoflake

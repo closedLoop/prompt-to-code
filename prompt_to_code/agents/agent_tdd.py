@@ -37,6 +37,7 @@ class PromptState(State):
             "temperature": 0.7,
             "model": "gpt-4",
             "max_tokens": 3000,
+            "request_timeout": 180,
         }
         default_llm |= kwargs.get("llm", {})
         self.llm = ChatOpenAI(**default_llm)

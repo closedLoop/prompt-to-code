@@ -54,16 +54,17 @@ def call_llm(llm, prompt, prefix="any", log_dir="./logs"):
     return result
 
 
-def run_agent(agent, name, filename, task: str):
+def run_agent(agent, name, filename, task: str, request_timeout=180):
     default_llm = {
         "temperature": 0.2,
         "max_tokens": 2000,
+        "request_timeout": request_timeout,
     }
     Model = OpenAI
     if agent == "tdd3":
         Model = ChatOpenAI
         default_llm["model_name"] = "gpt-3.5-turbo"
-    elif agent == "tdd" or agent == "tdd-chat" or agent == "tdd4":
+    elif agent in ["tdd", "tdd-chat", "tdd4"]:
         Model = ChatOpenAI
         default_llm["model_name"] = "gpt-4"
     elif agent.startswith("tdd-"):

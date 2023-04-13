@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from langchain.chat_models import ChatOpenAI
+from langchain.llms.openai import OpenAI
 
 from create_branch import run_shell_command
 from prompt_to_code.agents.prompts import (
@@ -32,7 +33,10 @@ def extract_code_from_response(r) -> str:
 def call_llm(llm, prompt, prefix="any", log_dir="./logs"):
     token_length = llm.get_num_tokens(prompt)
     cur_time = time.time()
-    result = llm.call_as_llm(prompt)
+    if hasattr(llm, "call_as_llm"):
+        result = llm.call_as_llm(prompt)
+    else:
+        result = llm(prompt)
     duration = time.time() - cur_time
 
     fname = Path(log_dir) / f"{prefix}-{round(cur_time*1000)}.log"
@@ -52,15 +56,20 @@ def run_agent(agent, name, filename, task: str):
         "temperature": 0.2,
         "max_tokens": 2000,
     }
+    Model = OpenAI
     if agent == "tdd3":
+        Model = ChatOpenAI
         default_llm["model_name"] = "gpt-3.5-turbo"
-    elif agent == "tdd":
+    elif agent == "tdd" or agent == "tdd-chat" or agent == "tdd4":
+        Model = ChatOpenAI
         default_llm["model_name"] = "gpt-4"
+    elif agent.startswith("tdd-"):
+        default_llm["model_name"] = "-".join(agent.split("-")[1:])
     else:
         raise NotImplementedError(f"Agent {agent} not implemented")
 
-    print(f"Running {agent}: {name} {default_llm}")
-    llm = ChatOpenAI(**default_llm)
+    llm = Model(**default_llm)
+    print(f"Running {agent}: {name} {llm}")
 
     # Run the steps
     _stub_code, functions_section = stub_step(filename, task, llm, name=name)

@@ -24,10 +24,13 @@ from prompt_to_code.parsers import extract_function_definitions
 from prompt_to_code.tools.execution import run_code
 
 
-def extract_code_from_response(r) -> str:
-    if r.startswith("```python"):
-        r = r.split("```python")[1].split("```")[0]
-    return r
+def extract_code_from_response(code) -> str:
+    code = re.sub(r"```[a-zA-Z]+[a-zA-Z0-9\-]*", "", code)
+    if code.startswith("```"):
+        code = code[3:]
+    if code.endswith("```"):
+        code = code[:-3]
+    return code.strip()
 
 
 def call_llm(llm, prompt, prefix="any", log_dir="./logs"):
@@ -260,6 +263,7 @@ def run_and_fix(
         examples="",
         error="".join(tb_str),
         code=code,
+        language="python3",
     )
 
     code = extract_code_from_response(

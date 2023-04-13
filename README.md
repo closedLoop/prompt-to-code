@@ -1,7 +1,37 @@
 # Prompt-to-Code
-Use large language models like GPT-4 to write code directly from the CLI
+An automated-test-driven-development tool that converts natural language prompts into executable Python code.
 
-Prompt-to-Code is a Python library that converts natural language text prompts into executable Python code. With this library, you can quickly generate Python code by simply describing the task you want to perform in natural language and it will save it to files to be executed by an intepreter.
+We use large language models like GPT-4 to write code directly from the CLI.  This library defines steps
+to generate code from natural language prompts.  These steps are defined as **agents** that execute actions down defined paths and loops.
+
+## Agents:
+Agents can write and execute multiple lines of code.  If they are run within a github repo they can also commit and push the code to the repo.
+
+### TDDAgent - Red-Green-Refactor
+Our TDDAgent executes a Red-Green-Refactor loop to generate code from natural language prompts and also generates passing tests.
+
+### ReflectionAgent - Write then Reflect
+Our ReflectionAgent first writes code from a natural language prompt and then reflects on the code to rewrite it as necessary.
+
+### CoderAgent - Just write the code
+A simple agent that just writes code from a natural language prompt and saves it to a file.
+
+# Results
+
+## HumanEval ()
+
+We achieve near SOTA results on the HumanEval dataset.  To replicate this, run the following command:
+
+    python examples/human_eval_script.py
+
+We set temperature = 0.2 and evaluated pass@1 using num_samples_per_task=1.
+
+
+
+Further Reading:
+ * [Reflexion: an autonomous agent with dynamic memory and self-reflection (pdf)](https://arxiv.org/abs/2303.11366)
+ * https://github.com/GammaTauAI/reflexion-human-eval
+ * https://github.com/GammaTauAI/leetcode-hard-gym
 
 ## Usage
 

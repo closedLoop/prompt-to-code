@@ -13,7 +13,7 @@ class AvailableMethods(BaseModel):
     branch: str | None
     code_hash: str | None = None
     embedding: list[float] | None = None
-    usages: dict[str, dict[str, list[tuple[str, int]]]] | None
+    usages: dict[str, list[tuple[str, int]]] | None
 
 
 class TaskDefinition(BaseModel):

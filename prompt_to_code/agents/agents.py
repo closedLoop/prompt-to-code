@@ -5,14 +5,12 @@ Paper: https://arxiv.org/pdf/2107.03374.pdf
 """
 
 import re
-import signal
 import time
-import traceback
 from pathlib import Path
 
 from langchain.chat_models import ChatOpenAI
 
-from create_branch import GitBranchCRUD
+from create_branch import run_shell_command
 from prompt_to_code.agents.prompts import (
     ERROR_PROMPT,
     FUNCTION_MENTION,
@@ -22,6 +20,7 @@ from prompt_to_code.agents.prompts import (
     STUB_STEP_PROMPT,
 )
 from prompt_to_code.parsers import extract_function_definitions
+from prompt_to_code.tools.execution import run_code
 
 
 def extract_code_from_response(r) -> str:
@@ -114,7 +113,7 @@ def green_step(
 
     # Run the tests again
     test_filename = filename.parent / f"tests/test_{filename.name}"
-    test_results, failed = GitBranchCRUD()._run_command(f"pytest {test_filename}")
+    test_results, failed = run_shell_command(f"pytest {test_filename}")
     return test_results, failed
 
 
@@ -222,16 +221,7 @@ def save_and_run_code(filename: Path, code, command) -> tuple[str, bool]:
     with open(filename, "w") as f:
         f.write(code)
 
-    return GitBranchCRUD()._run_command(f"{command} {filename}")
-
-
-def timeout_handler_wrapper(timeout=5):
-    msg = f"Execution took longer than {format} seconds"
-
-    def timeout_handler(_signum, _frame):
-        raise TimeoutError(msg)
-
-    return timeout_handler
+    return run_shell_command(f"{command} {filename}")
 
 
 def run_and_fix(
@@ -249,22 +239,7 @@ def run_and_fix(
         return code
 
     # Set the signal handler for the alarm signal
-    signal.signal(signal.SIGALRM, timeout_handler_wrapper(timeout=timeout))
-    tb_str = None
-    try:
-        # Set an alarm for 10 seconds
-        signal.alarm(timeout)
-        exec(code)
-    except TimeoutError as te:
-        error = f"TimeoutError: Execution took longer than {timeout} seconds"
-        tb_str = traceback.format_exception(type(te), value=error, tb=te.__traceback__)
-    except Exception as e:
-        tb_str = traceback.format_exception(type(e), value=e, tb=e.__traceback__)
-    finally:
-        # Cancel the alarm if it didn't go off
-        signal.alarm(0)
-        # Remove the signal handler and set it to the default behavior
-        signal.signal(signal.SIGALRM, signal.SIG_DFL)
+    tb_str = run_code(code, timeout)
 
     if tb_str is None:
         return code

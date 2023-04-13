@@ -1,30 +1,17 @@
 import re
-import subprocess
 
 import requests
+
+from prompt_to_code.tools.execution import run_shell_command
 
 
 class GitBranchCRUD:
     def __init__(self):
         pass
 
-    def _run_command(self, command) -> tuple[str, bool]:
-        """Returns stdout of command and a boolean indicating if there was an error"""
-        try:
-            result = subprocess.run(
-                command, capture_output=True, text=True, check=True, shell=True
-            )
-            return result.stdout.strip(), False
-        except subprocess.CalledProcessError as e:
-            if e.stdout:
-                return e.stdout.strip(), True
-            return f"Command failed: {command}. Error: {e}", True
-        except Exception as e:
-            raise RuntimeError(f"Command failed: {command}. Error: {e}") from e
-
     def create_branch(self, branch_name: str | None):
         # Check if in a git repo
-        self._run_command("git rev-parse --is-inside-work-tree")
+        run_shell_command("git rev-parse --is-inside-work-tree")
 
         # Check if branch name is valid and provided
         if not branch_name:
@@ -32,19 +19,19 @@ class GitBranchCRUD:
         if not re.match(r"^(?!\.)[a-zA-Z0-9\-\._]+(?<!\.)$", branch_name):
             raise RuntimeError("Invalid branch name")
 
-        (status, failed) = self._run_command("git status --porcelain")
+        (status, failed) = run_shell_command("git status --porcelain")
         if status or failed:
             raise RuntimeError(
                 "You have uncommitted changes. Commit or stash your changes before creating a new branch"
             )
 
         # Check if branch exists
-        branches, failed = self._run_command("git branch --list")
+        branches, failed = run_shell_command("git branch --list")
         if branch_name in branches.split("\n"):
             raise RuntimeError(f"Branch {branch_name} already exists")
 
         # Check out branch
-        self._run_command(f"git checkout -b {branch_name}")
+        run_shell_command(f"git checkout -b {branch_name}")
         print(f"Switched to a new branch: {branch_name}")
 
     def commit_changes(self, commit_message: str):
@@ -52,13 +39,13 @@ class GitBranchCRUD:
             raise RuntimeError("Commit message is required")
 
         # Check if uncommitted changes exist
-        status, failed = self._run_command("git status --porcelain")
+        status, failed = run_shell_command("git status --porcelain")
         if not status:
             raise RuntimeError("No changes to commit")
 
         # Add changes and create a commit
-        self._run_command("git add .")
-        self._run_command(f'git commit -m "{commit_message}"')
+        run_shell_command("git add .")
+        run_shell_command(f'git commit -m "{commit_message}"')
         print(f"Changes committed with message: {commit_message}")
 
     def create_pull_request(
@@ -81,7 +68,7 @@ class GitBranchCRUD:
             raise RuntimeError("Missing required information to create a pull request")
 
         # Check if the branches exist
-        branches, failed = self._run_command("git branch --list")
+        branches, failed = run_shell_command("git branch --list")
         if base_branch not in branches.split("\n") or head_branch not in branches.split(
             "\n"
         ):

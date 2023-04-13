@@ -31,17 +31,25 @@ except ImportError:
 
 
 def run_human_eval(
-    agent="tdd", outdir: Path | str = "./examples/human_eval", num_samples_per_task=1
+    agent="tdd",
+    outdir: Path | str = "./examples/human_eval",
+    num_samples_per_task=1,
+    start_question: int = 0,
+    start_ittr: int = 0,
 ):
     problems = read_problems(HUMAN_EVAL)
     outdir = Path(outdir)
     ittr = tqdm.tqdm(total=len(problems) * num_samples_per_task)
-    for i, example in enumerate(problems.values()):
-        for loop_cnt in range(num_samples_per_task):
+    problem_names = sorted(problems.keys())
+    for i, example_id in enumerate(problem_names):
+        if i < start_question:
+            ittr.update(num_samples_per_task - start_ittr)
+            continue
+        example = problems[example_id]
+        for loop_cnt in range(start_ittr, num_samples_per_task):
             filename = outdir / f"human_eval_{i:04}_{loop_cnt:04}.py"
             name = example["task_id"]
             prompt = example["prompt"]
-
             run_agent(agent, name, filename, prompt)
             ittr.update(1)
 
@@ -112,16 +120,22 @@ def human_eval(
     outdir_root: str = "./examples",
     num_samples_per_task: int = 1,
     just_score: bool = False,
+    start_question: int = 0,
+    start_ittr: int = 0,
 ):
     PromptToCodeConfig()
     outdir = Path(outdir_root) / f"./human_eval_{agent}"
 
     print("Running human eval for agent", agent)
-    print("saving output to {outdir}")
+    print(f"saving output to {outdir}")
     print("WARNING THIS WILL COST $$$, please monitor OPENAI bill")
     if not just_score:
         run_human_eval(
-            agent=agent, outdir=outdir, num_samples_per_task=num_samples_per_task
+            agent=agent,
+            outdir=outdir,
+            num_samples_per_task=num_samples_per_task,
+            start_question=start_question,
+            start_ittr=start_ittr,
         )
     score(num_samples_per_task=num_samples_per_task, outdir=outdir)
 

@@ -2,32 +2,38 @@
 
 
 import tempfile
+from pathlib import Path
 
 from leetcode_hard_gym.main import run_all
+from typer import Typer
 
 from examples.human_eval_script import run_agent
 from prompt_to_code.config import PromptToCodeConfig
 
-
-def agent_wrapper(prompt, **kwargs):
-    filename = tempfile.mkstemp(prefix="leetcode_gym_", suffix=".py")[1]
-
-    try:
-        name = kwargs.get("question_id", "unknown")
-        run_agent("tdd", name, filename, prompt)
-
-        with open(filename) as f:
-            code = f.read()
-        return code
-    except Exception as e:
-        print("Error: ", e)
-        return prompt
+app = Typer(name="Prompt-to-code: LeetCode Hard Gym")
 
 
-def run():
-    run_all(agent_wrapper, output_file="leetcode-results.jsonl", lang="python3")
+def agent_wrapper(agent="tdd"):
+    def agent_runner(prompt, **kwargs):
+        filename = Path(tempfile.mkstemp(prefix="leetcode_gym_", suffix=".py")[1])
+        try:
+            name = kwargs.get("question_id", "unknown")
+            run_agent(agent, name, filename, prompt)
+            return Path(filename).read_text()
+        except Exception as e:
+            print("Error: ", e)
+            return prompt
+
+    return agent_runner
+
+
+@app.command()
+def leetcode_eval(
+    agent: str = "tdd", output_file="leetcode-results.jsonl", lang="python3"
+):
+    PromptToCodeConfig()
+    run_all(agent_wrapper(agent=agent), output_file=output_file, lang=lang)
 
 
 if __name__ == "__main__":
-    PromptToCodeConfig()
-    run()
+    app()

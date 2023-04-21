@@ -1,0 +1,1 @@
+p2c --output-directory="./outputs/python-library" code "create a new python library called mylib that has a function called myfunc that takes a string and returns the string reversed.  Create a requirements.txt file with any dependencies and a setup.py so that the library can be uploaded to pypi and a README.md"

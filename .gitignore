@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+.vscode
+/examples/human_eval/
+/examples/human_eval_*

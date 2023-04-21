@@ -32,6 +32,7 @@ Further Reading:
  * [Reflexion: an autonomous agent with dynamic memory and self-reflection (pdf)](https://arxiv.org/abs/2303.11366)
  * https://github.com/GammaTauAI/reflexion-human-eval
  * https://github.com/GammaTauAI/leetcode-hard-gym
+ * [Task-driven Autonomous Agent Utilizing GPT-4, Pinecone, and LangChain for Diverse Applications](https://twitter.com/yoheinakajima/status/1640934493489070080?s=20)
 
 ## Usage
 

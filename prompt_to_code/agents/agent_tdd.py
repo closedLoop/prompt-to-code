@@ -60,7 +60,6 @@ class TDDMachine(StateMachine):
     create_branch = PromptState(initial=True)
     red = PromptState(
         "Red",
-        enter="on_enter_red",
     )
     green = PromptState()
     refactor = PromptState()

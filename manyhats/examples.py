@@ -1,7 +1,13 @@
 import dataclasses
+import json
+import sys
+import time
+from collections.abc import Callable
 from logging import Logger
 from pathlib import Path
 
+import networkx as nx
+import pandas as pd
 from langchain.chat_models import ChatOpenAI
 from statemachine import State, StateMachine
 
@@ -11,7 +17,7 @@ from manyhats.graph_helpers import get_graph
 
 @dataclasses.dataclass
 class APIStat:
-    name: str
+    name: str = ""
     count: float = 0
     time: float = 0
     sent: float = 0
@@ -20,10 +26,16 @@ class APIStat:
     cost: float = 0
 
 
+@dataclasses.dataclass
+class InternalState:
+    on_task: bool = False
+    questions: list[str] | None = None
+    statements: list[str] | None = None
+
+
 # def on_enter_red(self):
 
 # def on_exit_red(self):
-
 
 # def on_enter_green(self):
 
@@ -35,6 +47,50 @@ class APIStat:
 
 
 # def on_exit_refactor(self):
+class API:
+    name: str = "API"
+    description: str = "Generic API request"
+    stats: APIStat
+    model: Callable
+
+    def __init__(self, name: str, model: Callable, cost_units: str = "kb"):
+        self.name = name
+        self.stats = APIStat(name=name, units=cost_units)
+        self.model = model
+
+    def __call__(self, prompt: str) -> str:
+        return self.call(prompt)
+
+    def call(self, prompt: str) -> str:
+        """Updates stats and returns the result of the model"""
+        if hasattr(self.model, "get_num_tokens"):
+            request_size = self.model.get_num_tokens(prompt)
+        else:
+            request_size = sys.getsizeof(json.dumps(prompt)) / 1024
+
+        # Call API
+        cur_time = time.time()
+        if hasattr(self.model, "call_as_llm"):
+            result = self.model.call_as_llm(prompt)
+        else:
+            result = self.model(prompt)
+
+        if hasattr(self.model, "get_num_tokens"):
+            response_size = self.model.get_num_tokens(result)
+        else:
+            response_size = sys.getsizeof(json.dumps(result)) / 1024
+
+        duration = time.time() - cur_time
+
+        cost = response_size * 0.06 / 1000
+
+        self.stats.count += 1
+        self.stats.time += duration
+        self.stats.sent += request_size
+        self.stats.received += response_size
+        self.stats.cost += cost
+
+        return result
 
 
 class PromptState(State):
@@ -52,10 +108,55 @@ class PromptState(State):
         self.llm = ChatOpenAI(**default_llm)
 
 
+class TaskState(State):
+    api_actions: list[API]
+
+    def __init__(self, *args, **kwargs):
+        if "api_actions" in kwargs:
+            self.api_actions = kwargs.pop("api_actions")
+
+        super().__init__(*args, **kwargs)
+
+        default_llm = {
+            "temperature": 0.7,
+            "model": "gpt-4",
+            "max_tokens": 3000,
+            "request_timeout": 180,
+        }
+        default_llm |= kwargs.get("llm", {})
+        self.llm = ChatOpenAI(**default_llm)
+
+
 class AgentMachine(StateMachine):
     "A generic agent that robustly handles tasks"
+
+    # Parameters
     task: str = None
+    description: str = None
+    disable_questions: bool = False
+
+    # Status and State
+    internal_state: InternalState = InternalState()
     log: Logger.log = None
+    dag: nx.DiGraph = None
+
+    @property
+    def api_stats(self) -> list[APIStat]:
+        df = (
+            pd.DataFrame(self._all_stats())
+            .groupby(["name", "units"])
+            .sum()
+            .reset_index()
+        )
+        return [APIStat(**dict(r[1])) for r in df.iterrows()]
+
+    def _all_stats(self) -> list[APIStat]:
+        return [
+            a.stats
+            for s in self.states
+            if hasattr(s, "api_actions")
+            for a in s.api_actions
+        ]
 
     def __init__(self, *args, **kwargs):
         if "name" in kwargs:
@@ -68,7 +169,8 @@ class AgentMachine(StateMachine):
             self.task_type = kwargs.pop("task_type")
         if "actions" in kwargs:
             self.actions = kwargs.pop("actions")
-        self.api_stats = kwargs.pop("api_stats") if "api_stats" in kwargs else []
+        if "disable_questions" in kwargs:
+            self.disable_questions = kwargs.pop("disable_questions", False)
 
         if "log" in kwargs:
             self.log = kwargs.pop("log")
@@ -78,7 +180,18 @@ class AgentMachine(StateMachine):
         self.dag = get_graph(self)
 
     waiting = PromptState("⏳ Waiting for a task", initial=True)
-    understanding = PromptState("🤔 Understanding")
+    understanding = TaskState(
+        "🤔 Understanding",
+        api_actions=[
+            API(
+                "GPT-4",
+                ChatOpenAI(
+                    temperature=0.0, model="gpt-4", max_tokens=400, request_timeout=60
+                ),
+                cost_units="tokens",
+            )
+        ],
+    )
     thinking = PromptState(
         "🧠 Thinking",
     )
@@ -96,11 +209,12 @@ class AgentMachine(StateMachine):
     # before=["before_go_inline_1", "before_go_inline_2"],
     # after=["after_go_inline_1", "after_go_inline_2"],
 
+    # Transitions
     go = (
-        waiting.to(understanding, cond="has_task")
+        waiting.to(understanding, cond="has_task", after="on_understanding")
         | waiting.to(waiting, unless="has_task")
-        | understanding.to(thinking)
-        | understanding.to(asking)
+        | understanding.to(thinking, cond=["valid_task", "no_questions"])
+        | understanding.to(asking, unless=["valid_task", "no_questions"])
         | asking.to(understanding)
         | thinking.to(doing)
         | doing.to(formatting)
@@ -110,8 +224,19 @@ class AgentMachine(StateMachine):
         | reflecting.to(failed)
     )
 
+    # Conditions
     def has_task(self):
         return self.task is not None
+
+    def valid_task(self):
+        return self.internal_state.on_task
+
+    def no_questions(self):
+        return (
+            self.disable_questions
+            or (self.internal_state.questions is None)
+            or len(self.internal_state.questions) == 0
+        )
 
     # Generic State Methods
     def on_enter_state(self):
@@ -121,6 +246,12 @@ class AgentMachine(StateMachine):
     def on_exit_state(self):
         if self.log:
             self.log.print("\t\texited")
+
+    # State Specific Methods
+    def on_understanding(self):
+        self.current_state.api_actions[0]("HEY whats up")
+        if self.log:
+            self.log.print(f"{self.current_state.name}:\tUnderstanding the task")
 
     # Understanding Step
     # if off_topic, return "Off Topic"
@@ -163,26 +294,26 @@ You only answer questions related to sports and sports-betting. If you do not kn
             "data_retrieval": None,
             "calculation": None,
         },  # could also add in memory and context retrieval actions
-        api_stats=[
-            APIStat(
-                name="OpenAI",
-                count=0,
-                time=0,
-                sent=0,
-                received=0,
-                units="tokens",
-                cost=0,
-            ),
-            APIStat(
-                name="SERPAPI",
-                count=0,
-                time=0,
-                sent=0,
-                received=0,
-                units="kb",
-                cost=0,
-            ),
-        ],
+        # api_stats=[
+        #     APIStat(
+        #         name="OpenAI",
+        #         count=0,
+        #         time=0,
+        #         sent=0,
+        #         received=0,
+        #         units="tokens",
+        #         cost=0,
+        #     ),
+        #     APIStat(
+        #         name="SERPAPI",
+        #         count=0,
+        #         time=0,
+        #         sent=0,
+        #         received=0,
+        #         units="kb",
+        #         cost=0,
+        #     ),
+        # ],
     )
 
     # Understanding Step

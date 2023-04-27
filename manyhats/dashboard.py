@@ -3,6 +3,7 @@ import random
 from datetime import datetime
 from time import sleep
 
+import statemachine
 from rich import box
 from rich.console import Console
 from rich.layout import Layout
@@ -35,7 +36,6 @@ def make_layout(max_states: int = 2, num_apis=2) -> Layout:
         Layout(name="agents"),
         Layout(name="state", ratio=1),
     )
-    # layout["agents"].split(*[Layout(name=f"agent:{name}") for name in agent_names])
     return layout
 
 
@@ -160,7 +160,11 @@ class Interface:
         layout["task"].update(Header(agent=self.agent, starttime=self.starttime))
         layout["costs"].update(APIStats(agent=self.agent))
         layout["state"].update(
-            Panel(Pretty(self.agent), title="Variables", border_style="grey50")
+            Panel(
+                Pretty(self.agent.internal_state),
+                title="Variables",
+                border_style="grey50",
+            )
         )
         layout["agents"].update(AgentStatus(agent=self.agent))
         layout["footer"].update(Panel(self.console, title="Logs"))
@@ -168,7 +172,6 @@ class Interface:
 
 
 def render_dashboard(agent: AgentMachine, task: str):
-    # Console()
     starttime = datetime.now()
     dashboard = Interface(agent, starttime=starttime)
 
@@ -177,19 +180,24 @@ def render_dashboard(agent: AgentMachine, task: str):
         while True:
             sleep(0.2)
             # update agent.api_stats randomly
-            for stat in agent.api_stats:
-                stat.count += 1
-                stat.time += 0.1
-                stat.sent += 1
-                stat.received += 1
-                stat.cost += 0.0001
+            # for stat in agent.api_stats:
+            #     stat.count += 1
+            #     stat.time += 0.1
+            #     stat.sent += 1
+            #     stat.received += 1
+            #     stat.cost += 0.0001
             if random.random() < 0.1 and agent.task is None:
                 agent.task = task
 
             if agent.current_state.final:
-                print("Finished")
-                sleep(1.0)
-                return
+                agent.log.print("Finished")
+                exit()
 
             if random.random() < 0.1:
-                agent.go()
+                try:
+                    agent.go()
+                except statemachine.exceptions.TransitionNotAllowed:
+                    agent.log.print(
+                        f"Transition not allowed: {agent.current_state.name}"
+                    )
+                    exit()

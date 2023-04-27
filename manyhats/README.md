@@ -89,3 +89,20 @@ This is where AgentTDD comes into play.  It assembles tools and collects context
     1. This is where AgentTDD comes into play
 5. assembles tools and collects context and memories
 6. Determines if the task is completed
+
+
+# Basic Agents
+ 1. Test-Driven Development Agent
+ 2. Marketing Agent
+ 3. Sales Agent
+ 4. Customer Service Agent
+ 5. Project Management Agent
+ 6. CEO Agent
+ 7. DevOps Agent
+ 8. Frontend Agent
+ 8. Backend Agent
+
+# Enterprise Features
+ 1. Subscibe to github or linear issues
+ 2. Run in a Docker container - pull from github
+ 3. Github Actions - run on a schedule or on a webhook

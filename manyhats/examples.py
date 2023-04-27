@@ -1,11 +1,12 @@
 import dataclasses
+from logging import Logger
 from pathlib import Path
 
-import networkx as nx
 from langchain.chat_models import ChatOpenAI
 from statemachine import State, StateMachine
 
 from manyhats.dashboard import render_dashboard
+from manyhats.graph_helpers import get_graph
 
 
 @dataclasses.dataclass
@@ -51,35 +52,33 @@ class PromptState(State):
         self.llm = ChatOpenAI(**default_llm)
 
 
-def get_graph(machine: StateMachine) -> nx.DiGraph:
-    graph = nx.DiGraph()
-    # graph.add_node(machine._initial_node())
-    # graph.add_edge(machine._initial_edge())
-
-    for state in machine.states:
-        node_data = {
-            k: v
-            for k, v in state.__dict__.items()
-            if not str(k).startswith("_") and isinstance(v, (str, int, float, bool))
-        }
-        graph.add_node(state.id, **node_data)
-        for transition in state.transitions:
-            if transition.internal:
-                continue
-            edge_data = {
-                k: v
-                for k, v in transition.__dict__.items()
-                if not str(k).startswith("_") and isinstance(v, (str, int, float, bool))
-            }
-            graph.add_edge(transition.source.id, transition.target.id, **edge_data)
-
-    return graph
-
-
 class AgentMachine(StateMachine):
     "A generic agent that robustly handles tasks"
+    task: str = None
+    log: Logger.log = None
 
-    understanding = PromptState("🤔 Understanding", initial=True)
+    def __init__(self, *args, **kwargs):
+        if "name" in kwargs:
+            self.name = kwargs.pop("name")
+        if "description" in kwargs:
+            self.description = kwargs.pop("description")
+        if "goal" in kwargs:
+            self.goal = kwargs.pop("goal")
+        if "task_type" in kwargs:
+            self.task_type = kwargs.pop("task_type")
+        if "actions" in kwargs:
+            self.actions = kwargs.pop("actions")
+        self.api_stats = kwargs.pop("api_stats") if "api_stats" in kwargs else []
+
+        if "log" in kwargs:
+            self.log = kwargs.pop("log")
+
+        super().__init__(*args, **kwargs)
+
+        self.dag = get_graph(self)
+
+    waiting = PromptState("⏳ Waiting for a task", initial=True)
+    understanding = PromptState("🤔 Understanding")
     thinking = PromptState(
         "🧠 Thinking",
     )
@@ -88,10 +87,19 @@ class AgentMachine(StateMachine):
     formatting = PromptState("📝 Formatting")
     reflecting = PromptState("🤔 Reflecting")
     completed = PromptState("🏁 Finished", final=True)
-    failed = PromptState("🏁 Failed", final=True)
+    failed = PromptState("❌ Failed", final=True)
 
-    task_path = (
-        understanding.to(thinking)
+    # validators=["validation_1", "validation_2"],
+    # cond=["condition_1", "condition_2"],
+    # unless=["unless_1", "unless_2"],
+    # on=["on_inline_1", "on_inline_2"],
+    # before=["before_go_inline_1", "before_go_inline_2"],
+    # after=["after_go_inline_1", "after_go_inline_2"],
+
+    go = (
+        waiting.to(understanding, cond="has_task")
+        | waiting.to(waiting, unless="has_task")
+        | understanding.to(thinking)
         | understanding.to(asking)
         | asking.to(understanding)
         | thinking.to(doing)
@@ -101,6 +109,18 @@ class AgentMachine(StateMachine):
         | reflecting.to(completed)
         | reflecting.to(failed)
     )
+
+    def has_task(self):
+        return self.task is not None
+
+    # Generic State Methods
+    def on_enter_state(self):
+        if self.log:
+            self.log.print(f"{self.current_state.name}:\tEntered state ")
+
+    def on_exit_state(self):
+        if self.log:
+            self.log.print("\t\texited")
 
     # Understanding Step
     # if off_topic, return "Off Topic"
@@ -119,21 +139,6 @@ class AgentMachine(StateMachine):
     # did you successfully answer the question?
     # if no, is there anything you were uncertain about or assumptions you made?
     #        ask clarifying questions and await response if --no-clarifying-questions and repeat from start
-
-    def __init__(self, *args, **kwargs):
-        if "name" in kwargs:
-            self.name = kwargs.pop("name")
-        if "description" in kwargs:
-            self.description = kwargs.pop("description")
-        if "goal" in kwargs:
-            self.goal = kwargs.pop("goal")
-        if "task_type" in kwargs:
-            self.task_type = kwargs.pop("task_type")
-        if "actions" in kwargs:
-            self.actions = kwargs.pop("actions")
-        self.api_stats = kwargs.pop("api_stats") if "api_stats" in kwargs else []
-
-        super().__init__(*args, **kwargs)
 
 
 def run_sports_handicaper():
@@ -203,7 +208,6 @@ You only answer questions related to sports and sports-betting. If you do not kn
 
     # for event in sports_handicaper.task_path():
     # print(event)
-    # dag = get_graph(sports_handicaper)
 
 
 def export_graph(agent):

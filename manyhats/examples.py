@@ -29,24 +29,11 @@ class APIStat:
 @dataclasses.dataclass
 class InternalState:
     on_task: bool = False
+    task_as_understood: str = ""
     questions: list[str] | None = None
     statements: list[str] | None = None
 
 
-# def on_enter_red(self):
-
-# def on_exit_red(self):
-
-# def on_enter_green(self):
-
-
-# def on_exit_green(self):
-
-
-# def on_enter_refactor(self):
-
-
-# def on_exit_refactor(self):
 class API:
     name: str = "API"
     description: str = "Generic API request"
@@ -213,8 +200,8 @@ class AgentMachine(StateMachine):
     go = (
         waiting.to(understanding, cond="has_task", after="on_understanding")
         | waiting.to(waiting, unless="has_task")
-        | understanding.to(thinking, cond=["valid_task", "no_questions"])
-        | understanding.to(asking, unless=["valid_task", "no_questions"])
+        | understanding.to(thinking)  # , cond=["valid_task", "no_questions"]
+        | understanding.to(asking)  # , unless=["valid_task", "no_questions"]
         | asking.to(understanding)
         | thinking.to(doing)
         | doing.to(formatting)
@@ -249,9 +236,39 @@ class AgentMachine(StateMachine):
 
     # State Specific Methods
     def on_understanding(self):
-        self.current_state.api_actions[0]("HEY whats up")
-        if self.log:
-            self.log.print(f"{self.current_state.name}:\tUnderstanding the task")
+        prompt = """You are a professional sports handicapper and commentator that talks many sports television networks.
+You are an expert in the field and have access to any dataset you need to answer any sports and fantasy sports related questions.
+You only answer questions related to sports and sports-betting. If you do not know the answer you respond with "I don't know".
+
+Given the following question answer the following questions:
+ a. Is this question related to sports or sports-betting? (Yes or No)
+ b. List of all the entities mentioned in the question:
+ c. Re-write the question for clarity:
+ d. Provide a list of clarifying questions:
+
+Question: {question}
+
+Response:"""
+        response = self.current_state.api_actions[0](prompt.format(question=self.task))
+
+        data = response.split("\n")
+        at_end = False
+        for row in data:
+            if row.strip().startswith("a."):
+                self.internal_state.on_task = "yes" in row[2:].strip().lower()
+            elif row.strip().startswith("b."):
+                self.internal_state.entities = row[2:].strip().split(",")
+            elif row.strip().startswith("c."):
+                self.internal_state.task_as_understood = row[2:].strip()
+            elif row.strip().startswith("d."):
+                self.internal_state.questions = [row[2:].strip()]
+                at_end = True
+            elif at_end:
+                self.internal_state.questions.append(row[2:].strip())
+            else:
+                self.log.print(f"Ignoring response: {row}")
+
+        print("pause")
 
     # Understanding Step
     # if off_topic, return "Off Topic"
@@ -334,6 +351,7 @@ You only answer questions related to sports and sports-betting. If you do not kn
     # if no, is there anything you were uncertain about or assumptions you made?
     #        ask clarifying questions and await response if --no-clarifying-questions and repeat from start
     task = "How many receptions has Antonio Brown had in games with 10 or more targets?"
+    task = "What is the average number of fantasy points per game for Amari Cooper dring away games versus home games?"
     render_dashboard(sports_handicaper, task=task)
     # while True:
 

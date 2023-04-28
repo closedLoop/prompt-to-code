@@ -1,7 +1,5 @@
 import os
-import random
 from datetime import datetime
-from time import sleep
 
 import statemachine
 from rich import box
@@ -171,33 +169,19 @@ class Interface:
         return layout
 
 
-def render_dashboard(agent: AgentMachine, task: str):
+def render_dashboard(agent: AgentMachine, task: str) -> AgentMachine:
     starttime = datetime.now()
     dashboard = Interface(agent, starttime=starttime)
 
     with Live(get_renderable=dashboard.get_renderable, refresh_per_second=10):
         agent.log = dashboard.console
+        agent.task = task
         while True:
-            sleep(0.2)
-            # update agent.api_stats randomly
-            # for stat in agent.api_stats:
-            #     stat.count += 1
-            #     stat.time += 0.1
-            #     stat.sent += 1
-            #     stat.received += 1
-            #     stat.cost += 0.0001
-            if random.random() < 0.1 and agent.task is None:
-                agent.task = task
-
             if agent.current_state.final:
                 agent.log.print("Finished")
+                return agent
+            try:
+                agent.go()
+            except statemachine.exceptions.TransitionNotAllowed:
+                agent.log.print(f"Transition not allowed: {agent.current_state.name}")
                 exit()
-
-            if random.random() < 0.1:
-                try:
-                    agent.go()
-                except statemachine.exceptions.TransitionNotAllowed:
-                    agent.log.print(
-                        f"Transition not allowed: {agent.current_state.name}"
-                    )
-                    exit()

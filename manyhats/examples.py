@@ -9,6 +9,7 @@ from pathlib import Path
 import networkx as nx
 import pandas as pd
 from langchain.chat_models import ChatOpenAI
+from langchain.llms import OpenAI
 from statemachine import State, StateMachine
 
 from manyhats.dashboard import render_dashboard
@@ -32,6 +33,10 @@ class InternalState:
     task_as_understood: str = ""
     questions: list[str] | None = None
     statements: list[str] | None = None
+    entities: list[str] | None = None
+    steps: list[str] | None = None
+    intermediate_results: dict[str, any] | None = None
+    result: any = None
 
 
 class API:
@@ -80,27 +85,12 @@ class API:
         return result
 
 
-class PromptState(State):
-    """Manages LLM Prompts before and after states"""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        default_llm = {
-            "temperature": 0.7,
-            "model": "gpt-4",
-            "max_tokens": 3000,
-            "request_timeout": 180,
-        }
-        default_llm |= kwargs.get("llm", {})
-        self.llm = ChatOpenAI(**default_llm)
-
-
 class TaskState(State):
-    api_actions: list[API]
+    _api_actions: list[API] | None = None
 
     def __init__(self, *args, **kwargs):
         if "api_actions" in kwargs:
-            self.api_actions = kwargs.pop("api_actions")
+            self._api_actions = kwargs.pop("api_actions")
 
         super().__init__(*args, **kwargs)
 
@@ -112,6 +102,10 @@ class TaskState(State):
         }
         default_llm |= kwargs.get("llm", {})
         self.llm = ChatOpenAI(**default_llm)
+
+    @property
+    def api_actions(self) -> list[API]:
+        return self._api_actions or []
 
 
 class AgentMachine(StateMachine):
@@ -121,6 +115,27 @@ class AgentMachine(StateMachine):
     task: str = None
     description: str = None
     disable_questions: bool = False
+    default_actions: list[API] = [
+        # API(
+        #     "ChatOpenAI",
+        #     ChatOpenAI(
+        #         temperature=0.0, request_timeout=60
+        #     ),
+        #     cost_units="tokens",
+        # ),
+        API(
+            "OpenAI",
+            OpenAI(temperature=0.0, model_name="text-davinci-003", request_timeout=60),
+            cost_units="tokens",
+        ),
+        # API(
+        #     "GPT-4",
+        #     ChatOpenAI(
+        #         temperature=0.0, model="gpt-4", max_tokens=400, request_timeout=60
+        #     ),
+        #     cost_units="tokens",
+        # )
+    ]
 
     # Status and State
     internal_state: InternalState = InternalState()
@@ -129,12 +144,10 @@ class AgentMachine(StateMachine):
 
     @property
     def api_stats(self) -> list[APIStat]:
-        df = (
-            pd.DataFrame(self._all_stats())
-            .groupby(["name", "units"])
-            .sum()
-            .reset_index()
-        )
+        df = pd.DataFrame(self._all_stats())
+        if len(df) == 0:
+            return []
+        df = df.groupby(["name", "units"]).sum().reset_index()
         return [APIStat(**dict(r[1])) for r in df.iterrows()]
 
     def _all_stats(self) -> list[APIStat]:
@@ -142,8 +155,8 @@ class AgentMachine(StateMachine):
             a.stats
             for s in self.states
             if hasattr(s, "api_actions")
-            for a in s.api_actions
-        ]
+            for a in (s.api_actions or []) + (self.default_actions or [])
+        ] + [a.stats for a in (self.default_actions or [])]
 
     def __init__(self, *args, **kwargs):
         if "name" in kwargs:
@@ -166,49 +179,33 @@ class AgentMachine(StateMachine):
 
         self.dag = get_graph(self)
 
-    waiting = PromptState("⏳ Waiting for a task", initial=True)
+    waiting = TaskState("⏳ Waiting for a task", initial=True)
     understanding = TaskState(
         "🤔 Understanding",
-        api_actions=[
-            API(
-                "GPT-4",
-                ChatOpenAI(
-                    temperature=0.0, model="gpt-4", max_tokens=400, request_timeout=60
-                ),
-                cost_units="tokens",
-            )
-        ],
     )
-    thinking = PromptState(
+    thinking = TaskState(
         "🧠 Thinking",
     )
-    asking = PromptState("🙋 Asking")
-    doing = PromptState("🏃 Doing")
-    formatting = PromptState("📝 Formatting")
-    reflecting = PromptState("🤔 Reflecting")
-    completed = PromptState("🏁 Finished", final=True)
-    failed = PromptState("❌ Failed", final=True)
-
-    # validators=["validation_1", "validation_2"],
-    # cond=["condition_1", "condition_2"],
-    # unless=["unless_1", "unless_2"],
-    # on=["on_inline_1", "on_inline_2"],
-    # before=["before_go_inline_1", "before_go_inline_2"],
-    # after=["after_go_inline_1", "after_go_inline_2"],
+    asking = TaskState("🙋 Asking")
+    doing = TaskState("🏃 Doing")
+    formatting = TaskState("📝 Formatting")
+    reflecting = TaskState("🤔 Reflecting")
+    completed = TaskState("🏁 Finished", final=True)
+    failed = TaskState("❌ Failed", final=True)
 
     # Transitions
     go = (
-        waiting.to(understanding, cond="has_task", after="on_understanding")
+        waiting.to(understanding, cond="has_task")
         | waiting.to(waiting, unless="has_task")
-        | understanding.to(thinking)  # , cond=["valid_task", "no_questions"]
-        | understanding.to(asking)  # , unless=["valid_task", "no_questions"]
-        | asking.to(understanding)
+        | understanding.to(thinking, cond="valid_and_clear_task")
+        | understanding.to(asking, unless="valid_and_clear_task")
+        | asking.to(thinking)
         | thinking.to(doing)
         | doing.to(formatting)
         | formatting.to(reflecting)
-        | reflecting.to(asking)
-        | reflecting.to(completed)
-        | reflecting.to(failed)
+        | reflecting.to(completed, cond="task_completed")
+        | reflecting.to(failed, unless="task_completed")
+        # | reflecting.to(asking)
     )
 
     # Conditions
@@ -225,6 +222,12 @@ class AgentMachine(StateMachine):
             or len(self.internal_state.questions) == 0
         )
 
+    def task_completed(self):
+        return self.internal_state.task_completed
+
+    def valid_and_clear_task(self):
+        return self.no_questions() and self.valid_task()
+
     # Generic State Methods
     def on_enter_state(self):
         if self.log:
@@ -235,7 +238,12 @@ class AgentMachine(StateMachine):
             self.log.print("\t\texited")
 
     # State Specific Methods
-    def on_understanding(self):
+
+    # Understanding Step
+    # if off_topic, return "Off Topic"
+    # if clarifing questions, ask clarifying questions and await response
+    # if --no-clarifying-questions guess best answer and continue
+    def on_enter_understanding(self):
         prompt = """You are a professional sports handicapper and commentator that talks many sports television networks.
 You are an expert in the field and have access to any dataset you need to answer any sports and fantasy sports related questions.
 You only answer questions related to sports and sports-betting. If you do not know the answer you respond with "I don't know".
@@ -249,7 +257,10 @@ Given the following question answer the following questions:
 Question: {question}
 
 Response:"""
-        response = self.current_state.api_actions[0](prompt.format(question=self.task))
+        actions = self.current_state.api_actions or []
+        if len(actions) == 0:
+            actions = self.default_actions or []
+        response = actions[0](prompt.format(question=self.task))
 
         data = response.split("\n")
         at_end = False
@@ -257,7 +268,9 @@ Response:"""
             if row.strip().startswith("a."):
                 self.internal_state.on_task = "yes" in row[2:].strip().lower()
             elif row.strip().startswith("b."):
-                self.internal_state.entities = row[2:].strip().split(",")
+                self.internal_state.entities = [
+                    e.strip() for e in row[2:].strip().split(",") if e.strip()
+                ]
             elif row.strip().startswith("c."):
                 self.internal_state.task_as_understood = row[2:].strip()
             elif row.strip().startswith("d."):
@@ -268,25 +281,98 @@ Response:"""
             else:
                 self.log.print(f"Ignoring response: {row}")
 
-        print("pause")
+    def on_enter_asking(self):
+        prompt = """You are a professional sports handicapper and commentator that talks many sports television networks.
+You are an expert in the field and have access to any dataset you need to answer any sports and fantasy sports related questions.
+You only answer questions related to sports and sports-betting. If you do not know the answer you respond with "I don't know".
 
-    # Understanding Step
-    # if off_topic, return "Off Topic"
-    # if clarifing questions, ask clarifying questions and await response if --no-clarifying-questions guess best answer and continue
+In the context of this question (do not answer this question): {question}
 
-    # Problem decomposition, step types 'data retrieval', 'calculation'
-    # Steps, if data retrieval
+Only answer each of the following clarifing-questions with the most likely response:
+{questions}
 
-    # Execution Loop
-    # For right now tasks as executed linearly, but could be executed in parallel based on a DAG of steps
-    # For each step execute the step -> takes in the input and returns the output
+Answers (in a markdown-formatted list):
+"""
+        actions = self.current_state.api_actions or []
+        if len(actions) == 0:
+            actions = self.default_actions or []
 
-    # Output formatting step
+        response = actions[0](
+            prompt.format(
+                question=self.task,
+                questions="\n".join(
+                    [q for q in self.internal_state.questions if q.strip()]
+                ),
+            )
+        )
 
-    # Completion step
-    # did you successfully answer the question?
-    # if no, is there anything you were uncertain about or assumptions you made?
-    #        ask clarifying questions and await response if --no-clarifying-questions and repeat from start
+        data = response.split("\n")
+        self.internal_state.statements = data
+        self.internal_state.questions = []
+
+    def on_enter_thinking(self):
+        prompt = """You are a professional sports handicapper and commentator that talks many sports television networks.
+You are an expert in the field and have access to any dataset you need to answer any sports and fantasy sports related questions.
+You only answer questions related to sports and sports-betting. If you do not know the answer you respond with "I don't know".
+
+Given the following question, decompose it into a markdown-formatted list of the steps required to answer the question.
+
+Relevant Entities:
+{entities}
+
+Assuming:
+{statements}
+
+Question: {question}
+
+Each step should be of a type:  [retrieval, calculation]
+Steps (in a markdown-formatted list):
+"""
+        actions = self.current_state.api_actions or []
+        if len(actions) == 0:
+            actions = self.default_actions or []
+
+        response = actions[0](
+            prompt.format(
+                question=self.task,
+                statements="\n".join(
+                    [q for q in self.internal_state.statements if q.strip()]
+                ),
+                entities="\n".join(
+                    [e for e in self.internal_state.entities or [] if e.strip()]
+                ),
+            )
+        )
+        data = response.split("\n")
+        self.internal_state.steps = data
+
+    def on_enter_doing(self):
+        self.log.print("Doing steps")
+        if self.internal_state.intermediate_results is None:
+            self.internal_state.intermediate_results = {}
+        for i, step in enumerate(self.internal_state.steps or []):
+            self.log.print(f"{i} - {step}")
+            # TODO store the results of each step
+            self.internal_state.intermediate_results[i] = step
+
+        self.internal_state.result = "42"
+
+    def on_enter_formatting(self):
+        # Combine the outputs of the functions to generate the result
+        self.log.print(f"Doing Formatting of answer: {self.internal_state.result}")
+
+    def on_enter_reflecting(self):
+        self.log.print(f"Reflecting on answer: {self.internal_state.result}")
+        self.internal_state.task_completed = True
+        return self.internal_state.result
+
+    def on_enter_finished(self):
+        self.log.print(f"Reflecting on answer: {self.internal_state.result}")
+        return self.internal_state.result
+
+    def on_enter_failed(self):
+        self.log.print("Could not complete task")
+        return self.internal_state.result
 
 
 def run_sports_handicaper():
@@ -352,11 +438,7 @@ You only answer questions related to sports and sports-betting. If you do not kn
     #        ask clarifying questions and await response if --no-clarifying-questions and repeat from start
     task = "How many receptions has Antonio Brown had in games with 10 or more targets?"
     task = "What is the average number of fantasy points per game for Amari Cooper dring away games versus home games?"
-    render_dashboard(sports_handicaper, task=task)
-    # while True:
-
-    # for event in sports_handicaper.task_path():
-    # print(event)
+    return render_dashboard(sports_handicaper, task=task)
 
 
 def export_graph(agent):

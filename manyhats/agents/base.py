@@ -110,8 +110,8 @@ class AgentMachine(StateMachine):
     "A generic agent that robustly handles tasks"
 
     # Parameters
-    task: str = None
-    description: str = None
+    task: str | None = None
+    description: str | None = None
     disable_questions: bool = False
     default_actions: list[API] = [
         API(
@@ -120,6 +120,8 @@ class AgentMachine(StateMachine):
             cost_units="tokens",
         )
     ]
+    failure_reason: str | None = None
+    result: any = None
 
     # Status and State
     internal_state: InternalState = InternalState()
@@ -215,12 +217,10 @@ class AgentMachine(StateMachine):
 
     # Generic State Methods
     def on_enter_state(self):
-        if self.log:
-            self.log.print(f"{self.current_state.name}:\tEntered state ")
+        pass
 
     def on_exit_state(self):
-        if self.log:
-            self.log.print("\t\texited")
+        pass
 
     def on_enter_understanding(self):
         prompt = """{description}
@@ -230,7 +230,7 @@ Given the following question answer the following questions:
  a. Is this question related to your area of expertise? (Yes or No)
  b. List of all the entities mentioned in the question:
  c. Re-write the question for clarity:
- d. Provide a list of clarifying questions:
+ d. Only if the question is vague or ambiguous, provide a list of clarifying questions:
 
 Question: {question}
 
@@ -254,7 +254,8 @@ Response:"""
             elif row.strip().startswith("c."):
                 self.internal_state.task_as_understood = row[2:].strip()
             elif row.strip().startswith("d."):
-                self.internal_state.questions = [row[2:].strip()]
+                q = row[2:].strip()
+                self.internal_state.questions = [] if q.startswith("N/A") else [q]
                 at_end = True
             elif at_end:
                 self.internal_state.questions.append(row[2:].strip())
@@ -262,6 +263,13 @@ Response:"""
                 self.log.print(f"Ignoring response: {row}")
 
     def on_enter_asking(self):
+        questions = [q for q in self.internal_state.questions if q.strip()]
+
+        if not questions:
+            self.internal_state.statements = []
+            self.internal_state.questions = []
+            return
+
         prompt = """{description}
 
 In the context of this question (do not answer this question): {question}
@@ -279,9 +287,7 @@ Answers (in a markdown-formatted list):
             prompt.format(
                 description=self.description,
                 question=self.task,
-                questions="\n".join(
-                    [q for q in self.internal_state.questions if q.strip()]
-                ),
+                questions="\n".join(questions),
             )
         )
 
@@ -330,23 +336,90 @@ Steps (in a markdown-formatted list):
         for i, step in enumerate(self.internal_state.steps or []):
             self.log.print(f"{i} - {step}")
             # TODO store the results of each step
-            self.internal_state.intermediate_results[i] = step
-
-        self.internal_state.result = "42"
+            self.internal_state.intermediate_results[i] = ""
 
     def on_enter_formatting(self):
         # Combine the outputs of the functions to generate the result
+        prompt = """{description}
+
+Given the following question, our assumptions and all of the intermediate steps and results, only return the answer to the question:
+{question}
+
+Assuming:
+{statements}
+
+Steps:
+{steps}
+
+Question:
+{question}
+
+Answer:
+"""
+        actions = self.current_state.api_actions or []
+        if len(actions) == 0:
+            actions = self.default_actions or []
+
+        steps = []
+        for i, step in enumerate(self.internal_state.steps or []):
+            steps.append(f"{i}. {step}".strip())
+            result = self.internal_state.intermediate_results[i].strip()
+            steps.append(f"\t-> {result}")
+
+        response = actions[0](
+            prompt.format(
+                description=self.description,
+                question=self.task,
+                statements="\n".join(
+                    [q for q in self.internal_state.statements if q.strip()]
+                ),
+                steps="\n".join(steps),
+            )
+        )
+        self.internal_state.result = response
         self.log.print(f"Doing Formatting of answer: {self.internal_state.result}")
 
     def on_enter_reflecting(self):
         self.log.print(f"Reflecting on answer: {self.internal_state.result}")
-        self.internal_state.task_completed = True
-        return self.internal_state.result
+
+        prompt = """{description}
+
+Given the following question, is the answer likely accurate? (YES or NO)
+If not, say why not and what we need to do to improve the answer.
+
+Question:
+{question}
+
+Answer:
+{answer}
+
+Result:
+"""
+        self.log.print(f"Reflecting on answer: {self.internal_state.result}")
+        actions = self.current_state.api_actions or []
+        if len(actions) == 0:
+            actions = self.default_actions or []
+
+        response = actions[0](
+            prompt.format(
+                description=self.description,
+                question=self.task,
+                answer=self.internal_state.result,
+            )
+        )
+        self.log.print(f"Reflecting on answer: {self.internal_state.result}")
+        self.internal_state.task_completed = response.strip().lower().startswith("yes")
+        if self.internal_state.task_completed:
+            self.internal_state.failure_reason = None
+        else:
+            self.internal_state.failure_reason = response.strip()
 
     def on_enter_finished(self):
-        self.log.print(f"Reflecting on answer: {self.internal_state.result}")
+        self.log.print(f"Answer: {self.internal_state.result}")
         return self.internal_state.result
 
     def on_enter_failed(self):
-        self.log.print("Could not complete task")
+        self.log.print(
+            f"Could not complete task because: {self.internal_state.failure_reason}"
+        )
         return self.internal_state.result

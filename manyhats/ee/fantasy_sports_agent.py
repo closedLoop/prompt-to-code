@@ -15,24 +15,4 @@ You only answer questions related to sports and sports-betting.""",
             "data_retrieval": None,
             "calculation": None,
         },
-    )  # could also add in memory and context retrieval actions
-    # api_stats=[
-    #     APIStat(
-    #         name="OpenAI",
-    #         count=0,
-    #         time=0,
-    #         sent=0,
-    #         received=0,
-    #         units="tokens",
-    #         cost=0,
-    #     ),
-    #     APIStat(
-    #         name="SERPAPI",
-    #         count=0,
-    #         time=0,
-    #         sent=0,
-    #         received=0,
-    #         units="kb",
-    #         cost=0,
-    #     ),
-    # ],
+    )

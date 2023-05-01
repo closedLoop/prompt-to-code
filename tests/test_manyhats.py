@@ -1,6 +1,6 @@
 import unittest
 
-from manyhats.agents.trivia import LMGTFYAgent
+from manyhats.agents.trivia import LMGTFY
 from manyhats.dashboard import render_dashboard
 
 
@@ -19,6 +19,6 @@ class TestManyHats(unittest.TestCase):
 if __name__ == "__main__":
     # unittest.main()
     output = render_dashboard(
-        LMGTFYAgent(), task="With which game is Santosh Trophy associated?"
+        LMGTFY(), task="With which game is Santosh Trophy associated?"
     )
     print(output)

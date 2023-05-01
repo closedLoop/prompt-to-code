@@ -49,9 +49,6 @@ class API:
         self.model = model
 
     def __call__(self, prompt: str) -> str:
-        return self.call(prompt)
-
-    def call(self, prompt: str) -> str:
         """Updates stats and returns the result of the model"""
         if hasattr(self.model, "get_num_tokens"):
             request_size = self.model.get_num_tokens(prompt)
@@ -59,20 +56,16 @@ class API:
             request_size = sys.getsizeof(json.dumps(prompt)) / 1024
 
         # Call API
-        cur_time = time.time()
-        if hasattr(self.model, "call_as_llm"):
-            result = self.model.call_as_llm(prompt)
-        else:
-            result = self.model(prompt)
+        with time.time() as cur_time:
+            result = self.call(prompt)
+            duration = time.time() - cur_time
 
         if hasattr(self.model, "get_num_tokens"):
             response_size = self.model.get_num_tokens(result)
         else:
             response_size = sys.getsizeof(json.dumps(result)) / 1024
 
-        duration = time.time() - cur_time
-
-        cost = response_size * 0.06 / 1000
+        cost = self.cost(request_size, response_size)
 
         self.stats.count += 1
         self.stats.time += duration
@@ -81,6 +74,16 @@ class API:
         self.stats.cost += cost
 
         return result
+
+    def call(self, prompt: str) -> str:
+        return (
+            self.model.call_as_llm(prompt)
+            if hasattr(self.model, "call_as_llm")
+            else self.model(prompt)
+        )
+
+    def cost(self, request_size, response_size):
+        return request_size * 0 + response_size * 0.06 / 1000
 
 
 class TaskState(State):

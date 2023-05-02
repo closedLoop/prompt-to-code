@@ -169,6 +169,33 @@ class Interface:
         return layout
 
 
+def run_no_dashboard(agent: AgentMachine, task: str) -> AgentMachine:
+    import logging
+
+    logger = logging.getLogger("manyhats")
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+
+    agent.log = logger
+    agent.log.print = logger.info
+    agent.log.print(f"Starting Task: {task}")
+    agent.task = task
+    while True:
+        if agent.current_state.final:
+            agent.log.info(f"Result: {agent.result}")
+            return agent
+        try:
+            agent.go()
+        except statemachine.exceptions.TransitionNotAllowed:
+            agent.log.print(f"Transition not allowed: {agent.current_state.name}")
+            exit()
+
+
 def render_dashboard(agent: AgentMachine, task: str) -> AgentMachine:
     starttime = datetime.now()
     dashboard = Interface(agent, starttime=starttime)

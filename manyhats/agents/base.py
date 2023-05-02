@@ -7,6 +7,7 @@ from logging import Logger
 
 import networkx as nx
 import pandas as pd
+from langchain import SerpAPIWrapper
 from langchain.chat_models import ChatOpenAI
 from langchain.llms import OpenAI
 from statemachine import State, StateMachine
@@ -56,9 +57,9 @@ class API:
             request_size = sys.getsizeof(json.dumps(prompt)) / 1024
 
         # Call API
-        with time.time() as cur_time:
-            result = self.call(prompt)
-            duration = time.time() - cur_time
+        cur_time = time.time()
+        result = self.call(prompt)
+        duration = time.time() - cur_time
 
         if hasattr(self.model, "get_num_tokens"):
             response_size = self.model.get_num_tokens(result)
@@ -116,6 +117,7 @@ class AgentMachine(StateMachine):
     task: str | None = None
     description: str | None = None
     disable_questions: bool = False
+    reflect_on_answer: bool = False
     default_actions: list[API] = [
         API(
             "OpenAI",
@@ -266,8 +268,10 @@ Response:"""
                 self.log.print(f"Ignoring response: {row}")
 
     def on_enter_asking(self):
-        questions = [q for q in self.internal_state.questions if q.strip()]
-
+        if self.internal_state.questions:
+            questions = [q for q in self.internal_state.questions if q.strip()]
+        else:
+            questions = []
         if not questions:
             self.internal_state.statements = []
             self.internal_state.questions = []
@@ -330,7 +334,7 @@ Steps (in a markdown-formatted list):
             )
         )
         data = response.split("\n")
-        self.internal_state.steps = data
+        self.internal_state.steps = [step.strip() for step in data if step.strip()]
 
     def on_enter_doing(self):
         self.log.print("Doing steps")
@@ -338,8 +342,13 @@ Steps (in a markdown-formatted list):
             self.internal_state.intermediate_results = {}
         for i, step in enumerate(self.internal_state.steps or []):
             self.log.print(f"{i} - {step}")
-            # TODO store the results of each step
-            self.internal_state.intermediate_results[i] = ""
+            if "retrieval" in step.lower():
+                results = SerpAPIWrapper().run(step)
+            elif "calculation" in step.lower():
+                results = SerpAPIWrapper().run(step)
+            else:
+                results = ""
+            self.internal_state.intermediate_results[i] = results
 
     def on_enter_formatting(self):
         # Combine the outputs of the functions to generate the result
@@ -385,6 +394,10 @@ Answer:
     def on_enter_reflecting(self):
         self.log.print(f"Reflecting on answer: {self.internal_state.result}")
 
+        if not self.reflect_on_answer:
+            self.internal_state.task_completed = True
+            self.internal_state.failure_reason = None
+            return
         prompt = """{description}
 
 Given the following question, is the answer likely accurate? (YES or NO)

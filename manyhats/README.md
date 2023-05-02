@@ -98,6 +98,38 @@ classDiagram
     Role --> "*" Tool
 ```
 
+Next steps
+
+1. Create the statemeachinCreate an agent class that can evaluate, execute, and assess tasks.
+2. Move state-machines to a workflow class that can be used by an agent to complete tasks.
+3. Create a tool class that can be used by a workflow to complete tasks.
+
+
+## Examples
+
+Create a trivia bot that can answer questions from a list of topics.
+
+You can launch either a single agent via CLI
+
+```bash
+manyhats --hat trivia "What is the square root of the age of the President of France?"
+```
+This should
+1. Launch create a new agent with a trivia hat.
+2. Submit the question to the agent via a work-queue
+3. The agent will evaluate the question and determine if it can answer it.
+
+
+
+
+```python
+from manyhats import ManyHatsAgent, ManyHatsRole, ManyHatsTask, ManyHatsWorkflow, ManyHatsTool
+
+
+
+
+# DEPRECATED
+
 ## Services
 
  * Version Control:

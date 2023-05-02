@@ -1,7 +1,7 @@
 import unittest
 
 from manyhats.agents.trivia import LMGTFY
-from manyhats.dashboard import render_dashboard
+from manyhats.dashboard import run_no_dashboard
 
 
 class TestManyHats(unittest.TestCase):
@@ -18,7 +18,14 @@ class TestManyHats(unittest.TestCase):
 
 if __name__ == "__main__":
     # unittest.main()
-    output = render_dashboard(
-        LMGTFY(), task="With which game is Santosh Trophy associated?"
+    # output = render_dashboard(
+    #     Trivia(), task="With which game is Santosh Trophy associated?"
+    # )
+
+    # output = render_dashboard(
+    #     LMGTFY(), task= "What is the square root of the age of the President of France?"
+    # )
+    output = run_no_dashboard(
+        LMGTFY(), task="What is the square root of the age of the President of France?"
     )
     print(output)

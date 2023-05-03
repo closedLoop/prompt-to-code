@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime
 
@@ -170,19 +171,8 @@ class Interface:
 
 
 def run_no_dashboard(agent: AgentMachine, task: str) -> AgentMachine:
-    import logging
+    configure_logging_for_agent(agent)
 
-    logger = logging.getLogger("manyhats")
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG)
-
-    agent.log = logger
-    agent.log.print = logger.info
     agent.log.print(f"Starting Task: {task}")
     agent.task = task
     while True:
@@ -194,6 +184,20 @@ def run_no_dashboard(agent: AgentMachine, task: str) -> AgentMachine:
         except statemachine.exceptions.TransitionNotAllowed:
             agent.log.print(f"Transition not allowed: {agent.current_state.name}")
             exit()
+
+
+def configure_logging_for_agent(agent: AgentMachine):
+    logger = logging.getLogger("manyhats")
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+
+    agent.log = logger
+    agent.log.print = logger.info
 
 
 def render_dashboard(agent: AgentMachine, task: str) -> AgentMachine:

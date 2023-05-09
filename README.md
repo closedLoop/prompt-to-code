@@ -1,4 +1,6 @@
 # Prompt-to-Code
+A Production-Grade Agent suitable for ETL workloads
+
 An automated-test-driven-development tool that converts natural language prompts into executable Python code.
 
 We use large language models like GPT-4 to write code directly from the CLI.  This library defines steps

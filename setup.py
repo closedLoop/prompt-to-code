@@ -20,6 +20,8 @@ setup(
     packages=find_packages(),
     entry_points={
         "console_scripts": [
+            "taskforce=taskforce.__main__:main",
+            "tf=taskforce.__main__:main",
             "manyhats=manyhats.__main__:main",
             "p2c=prompt_to_code.__main__:main",
             "prompt-to-code=prompt_to_code.__main__:main",

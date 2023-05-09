@@ -1,136 +1,208 @@
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL_FULL")
 }
 
 generator client {
-  provider = "prisma-client-py"
+  provider             = "prisma-client-py"
+  recursive_type_depth = 10
+}
+
+model UserRequest {
+  id           String  @id @unique
+  created_at   String
+  payload      String
+  channel      String
+  target_agent String
+  User         User?   @relation(fields: [userId], references: [id])
+  userId       String?
+}
+
+model User {
+  id                 String         @id @unique
+  name               String
+  email              String
+  permissions        String[]
+  request_log        UserRequest[]
+  stripe_customer_id String? // Optional field represented by str | None in the original Python model
+  Organizations      Organization[]
+  TaskForce          TaskForce      @relation(fields: [taskForceId], references: [id])
+  OrgOwners          Organization[] @relation("owner_user")
+  taskForceId        String
+}
+
+model AgentConfig {
+  id             String       @id @unique
+  name           String
+  config         Json
+  Organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+}
+
+model Cluster {
+  id              String            @id @unique
+  name            String
+  spec            String
+  config          Json
+  TaskForceLaunch TaskForceLaunch[]
+}
+
+model Organization {
+  id           String        @id @unique
+  name         String
+  description  String
+  logo         String
+  url          String
+  owner_user   User          @relation("owner_user", references: [id], fields: [owner_userId])
+  // owner_user_id String
+  task_forces  TaskForce[]
+  users        User[]
+  configs      AgentConfig[]
+  agents       WorkerAgent[]
+  owner_userId String
 }
 
 model Tool {
-  id        String     @id
-  name      String
-  workflows Workflow[] @relation()
-  Role      Role?      @relation(fields: [roleId], references: [id])
-  roleId    String?
+  id          String   @id @unique
+  name        String
+  description String
+  params      Json
+  Workflow    Workflow @relation(fields: [workflowId], references: [id])
+  Role        Role     @relation(fields: [roleId], references: [id])
+  workflowId  String
+  roleId      String
+}
+
+model Task {
+  id          String      @id @unique
+  action_item String
+  created_at  DateTime
+  agent_id    String
+  parent_task String?
+  AgentWork   AgentWork[]
+}
+
+model AgentDecision {
+  id          String    @id @unique
+  source      String
+  target      String
+  candidates  String[]
+  state       String
+  AgentWork   AgentWork @relation(fields: [agentWorkId], references: [id])
+  agentWorkId String
+}
+
+model AgentAction {
+  id            String    @id @unique
+  prev_step     String
+  new_step      String
+  state         String
+  action        String
+  action_params Json
+  candidates    String[]
+  output        Json
+  side_effects  String[]
+  costs         Json
+  wall_time     Float
+  cpu_time      Float
+  memory        Float
+  logs          String[]
+  AgentWork     AgentWork @relation(fields: [agentWorkId], references: [id])
+  agentWorkId   String
+}
+
+model AgentWork {
+  id           String          @id @unique
+  started_at   DateTime
+  completed_at DateTime?
+  task         Task            @relation(fields: [task_id], references: [id])
+  task_id      String
+  result       Json?
+  decisions    AgentDecision[]
+  actions      AgentAction[]
 }
 
 model Workflow {
-  id       String  @id
-  name     String
-  machines Json
-  tools    Tool[]
-  Role     Role?   @relation(fields: [roleId], references: [id])
-  roleId   String?
+  id             String   @id @unique
+  name           String
+  machines       Json
+  tools          Tool[]
+  output_formats String[]
+  Role           Role     @relation(fields: [roleId], references: [id])
+  roleId         String
 }
 
 model Role {
-  id          String        @id
+  id          String        @id @unique
   name        String
   description String
   goal        String
   task_type   String
-  workflows   Workflow[]    @relation()
-  tools       Tool[]        @relation()
-  config      Json
+  workflows   Workflow[]
+  tools       Tool[]
   WorkerAgent WorkerAgent[]
 }
 
 model WorkerAgent {
-  id                    String        @id
-  role                  Role          @relation(fields: [roleId], references: [id])
-  roleId                String
-  execution_environment String
-  environment_variables Json
-  Task                  Task[]
-  Worksite              Worksite?     @relation(fields: [worksiteId], references: [id])
-  worksiteId            String?
-  Team                  Team?         @relation(fields: [teamId], references: [id])
-  teamId                String?
-  Organization          Organization? @relation(fields: [organizationId], references: [id])
-  organizationId        String?
-}
-
-model Task {
-  id          String      @id
-  action_item String
-  agent       WorkerAgent @relation(fields: [agentId], references: [id])
-  agentId     String
-  parent_task String?
-}
-
-model Cluster {
-  id         String    @id
-  name       String
-  spec       String
-  config     Json
-  Worksite   Worksite? @relation(fields: [worksiteId], references: [id])
-  worksiteId String?
-}
-
-model Worksite {
-  id             String        @id
+  id             String       @id @unique
+  logo           String
   name           String
-  infrastructure Cluster[]     @relation()
-  worker_agents  WorkerAgent[] @relation()
-  global_config  Json
-  central_logs   Json
-  results_logs   Json
-  api_endpoint   String
-  chat_endpoint  String
-  chat_agent     String?
-  task_sources   Json
-  Team           Team?         @relation(fields: [teamId], references: [id])
-  teamId         String?
+  bio            String
+  role           Role         @relation(fields: [role_id], references: [id])
+  role_id        String
+  config         Json
+  Organization   Organization @relation(fields: [organizationId], references: [id])
+  TaskForce      TaskForce[]
+  LeadAgent      TaskForce[]  @relation("lead_agent")
+  organizationId String
 }
 
-model Permission {
-  id          String  @id
-  name        String
-  description String
-  User        User?   @relation(fields: [userId], references: [id])
-  userId      String?
+model TaskForce {
+  id              String        @id @unique
+  name            String
+  purpose         String
+  description     String
+  created_at      DateTime
+  updated_at      DateTime
+  uuid            String?
+  worker_agents   WorkerAgent[]
+  lead_agent      WorkerAgent?  @relation("lead_agent", fields: [lead_agent_id], references: [id])
+  lead_agent_id   String?
+  users           User[]
+  final_authority String?
+  tools           Json
+  comms           Json
+  Organization    Organization  @relation(references: [id], fields: [organizationId])
+  organizationId  String
 }
 
-model User {
-  id                String         @id
-  name              String
-  email             String         @unique
-  permissions       Permission[]   @relation()
-  teams             Team[]         @relation("team_members")
-  request_log       Json
-  Team              Team[]
-  OrganizationOwner Organization[]
+model TaskForceResults {
+  id                   String            @id @unique
+  costs                Json
+  metrics              Json
+  actions              Json
+  tool_usage           Json
+  full_logs            Json
+  main                 Json
+  tasks                Json
+  intra_task_decisions Json
+  inter_task_decisions Json
+  feedback             Json
+  TaskForceLaunch      TaskForceLaunch[]
 }
 
-model Team {
-  id                 String        @id
-  name               String
-  description        String
-  logo               String
-  url                String
-  members            User[]        @relation("team_members")
-  stripe_customer_id String
-  owner_user         User          @relation(fields: [ownerUserId], references: [id])
-  ownerUserId        String
+model TaskForceLaunch {
+  id                 String           @id @unique
+  created_at         DateTime
+  started_at         DateTime
+  status             String
+  deadline           DateTime?
+  budget             Float?
   config             Json
-  custom_agents      WorkerAgent[] @relation()
-  worksites          Worksite[]    @relation()
-  clusters           Json
-  Organization       Organization? @relation(fields: [organizationId], references: [id])
-  organizationId     String?
-}
-
-model Organization {
-  id                 String        @id @default(uuid())
-  name               String
-  description        String?
-  logo               String?
-  url                String?
-  teams              Team[]        @relation()
-  owner_user         User          @relation(fields: [ownerUserId], references: [id])
-  ownerUserId        String
-  stripe_customer_id String?       @db.VarChar(191)
-  config             Json
-  custom_agents      WorkerAgent[]
+  environment        Cluster          @relation(fields: [environment_id], references: [id])
+  environment_id     String
+  results            TaskForceResults @relation(fields: [taskForceResultsId], references: [id])
+  api_endpoint       String
+  chat_endpoint      String
+  taskForceResultsId String
 }

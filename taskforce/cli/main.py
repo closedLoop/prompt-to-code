@@ -1,22 +1,24 @@
+import os
 from pathlib import Path
 from pprint import pprint
+from typing import Annotated
 
 import dotenv
 import pyfiglet
 import typer
 
-from manyhats.agents import AGENTS
-from manyhats.dashboard import render_dashboard, run_no_dashboard
-from prompt_to_code.config import PromptToCodeConfig
-from prompt_to_code.version import VERSION
+# from taskforce.agents import AGENTS
+# from taskforce.dashboard import render_dashboard, run_no_dashboard
+from taskforce.config import TaskForceConfig
+from taskforce.version import VERSION
 
 dotenv.load_dotenv()
-config = PromptToCodeConfig()
-app = typer.Typer(name="ManyHats")
+config = TaskForceConfig()
+app = typer.Typer(name="TaskForce")
 
 
 def banner():
-    banner = pyfiglet.figlet_format("ManyHats", font="cybermedium").rstrip()
+    banner = pyfiglet.figlet_format("TaskForce", font="cybermedium").rstrip()
     banner = "\033[92m" + banner + "\033[0m"
     return f"{banner}  \033[90mv{VERSION}\033[0m"
 
@@ -35,11 +37,27 @@ def main(
 
 
 @app.command()
-def list():
-    """List the available Roles."""
-    typer.echo("Available Roles:")
-    for role in AGENTS:
-        typer.echo(f"  - {role}")
+def login(
+    username: Annotated[
+        str | None, typer.Argument(..., help="The username to authenticate with.")
+    ] = None
+):
+    """
+    Authenticates the user and sets the current user as ~/.taskforce/current_user
+    """
+    if username := (username or os.getlogin()).lower().strip():
+        # Create the ~/.taskforce directory if it doesn't exist
+        taskforce_dir = Path.home() / ".taskforce"
+        taskforce_dir.mkdir(parents=True, exist_ok=True)
+
+        # Set the current user
+        current_user_file = taskforce_dir / "current_user"
+        with current_user_file.open("w") as f:
+            f.write(username)
+
+        typer.echo(f"Logged in as {username}")
+    else:
+        typer.echo("Invalid username")
 
 
 @app.command()
@@ -58,21 +76,21 @@ def run(
 
     """
 
-    PromptToCodeConfig()
-
+    TaskForceConfig()
+    AGENTS = []
     if hat not in AGENTS:
         typer.echo(
             f"Role '{hat}' not found.  Call 'manyhats list' to see available Roles."
         )
         raise typer.Exit(code=1)
 
-    agent = AGENTS[hat]()
+    AGENTS[hat]()
 
-    if dashboard:
-        output = render_dashboard(agent, task=action_item)
-    else:
-        output = run_no_dashboard(agent, action_item)
-    print(output)
+    # if dashboard:
+    #     output = render_dashboard(agent, task=action_item)
+    # else:
+    #     output = run_no_dashboard(agent, action_item)
+    # print(output)
 
 
 @app.command()
@@ -82,7 +100,8 @@ def show_config():
 
 
 @app.command()
-def show_license():
+def info():
+    # typer.echo(banner() + "\n")
     typer.echo("https://github.com/closedLoop/prompt-to-code/blob/main/LICENSE")
     typer.echo("Copyright (c) 2023 Sean Kruzel & ClosedLoop Technologies, LLC")
 

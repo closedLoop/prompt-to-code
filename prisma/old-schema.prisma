@@ -1,0 +1,136 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-py"
+}
+
+model Tool {
+  id        String     @id
+  name      String
+  workflows Workflow[] @relation()
+  Role      Role?      @relation(fields: [roleId], references: [id])
+  roleId    String?
+}
+
+model Workflow {
+  id       String  @id
+  name     String
+  machines Json
+  tools    Tool[]
+  Role     Role?   @relation(fields: [roleId], references: [id])
+  roleId   String?
+}
+
+model Role {
+  id          String        @id
+  name        String
+  description String
+  goal        String
+  task_type   String
+  workflows   Workflow[]    @relation()
+  tools       Tool[]        @relation()
+  config      Json
+  WorkerAgent WorkerAgent[]
+}
+
+model WorkerAgent {
+  id                    String        @id
+  role                  Role          @relation(fields: [roleId], references: [id])
+  roleId                String
+  execution_environment String
+  environment_variables Json
+  Task                  Task[]
+  Worksite              Worksite?     @relation(fields: [worksiteId], references: [id])
+  worksiteId            String?
+  Team                  Team?         @relation(fields: [teamId], references: [id])
+  teamId                String?
+  Organization          Organization? @relation(fields: [organizationId], references: [id])
+  organizationId        String?
+}
+
+model Task {
+  id          String      @id
+  action_item String
+  agent       WorkerAgent @relation(fields: [agentId], references: [id])
+  agentId     String
+  parent_task String?
+}
+
+model Cluster {
+  id         String    @id
+  name       String
+  spec       String
+  config     Json
+  Worksite   Worksite? @relation(fields: [worksiteId], references: [id])
+  worksiteId String?
+}
+
+model Worksite {
+  id             String        @id
+  name           String
+  infrastructure Cluster[]     @relation()
+  worker_agents  WorkerAgent[] @relation()
+  global_config  Json
+  central_logs   Json
+  results_logs   Json
+  api_endpoint   String
+  chat_endpoint  String
+  chat_agent     String?
+  task_sources   Json
+  Team           Team?         @relation(fields: [teamId], references: [id])
+  teamId         String?
+}
+
+model Permission {
+  id          String  @id
+  name        String
+  description String
+  User        User?   @relation(fields: [userId], references: [id])
+  userId      String?
+}
+
+model User {
+  id                String         @id
+  name              String
+  email             String         @unique
+  permissions       Permission[]   @relation()
+  teams             Team[]         @relation("team_members")
+  request_log       Json
+  Team              Team[]
+  OrganizationOwner Organization[]
+}
+
+model Team {
+  id                 String        @id
+  name               String
+  description        String
+  logo               String
+  url                String
+  members            User[]        @relation("team_members")
+  stripe_customer_id String
+  owner_user         User          @relation(fields: [ownerUserId], references: [id])
+  ownerUserId        String
+  config             Json
+  custom_agents      WorkerAgent[] @relation()
+  worksites          Worksite[]    @relation()
+  clusters           Json
+  Organization       Organization? @relation(fields: [organizationId], references: [id])
+  organizationId     String?
+}
+
+model Organization {
+  id                 String        @id @default(uuid())
+  name               String
+  description        String?
+  logo               String?
+  url                String?
+  teams              Team[]        @relation()
+  owner_user         User          @relation(fields: [ownerUserId], references: [id])
+  ownerUserId        String
+  stripe_customer_id String?       @db.VarChar(191)
+  config             Json
+  custom_agents      WorkerAgent[]
+}

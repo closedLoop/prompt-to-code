@@ -1,17 +1,5 @@
 version: "3.9"
 services:
-  prisma-studio:
-    container_name: prisma-studio
-    image: timothyjmiller/prisma-studio:latest
-    restart: unless-stopped
-    environment:
-      POSTGRES_DATABASE: taskforce
-      POSTGRES_HOST: taskforce-db
-      POSTGRES_USERNAME: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@taskforce-db:5432/taskforce"
-    ports:
-      - 5555:5555
   postgres-taskforce:
     image: postgres:15.2
     container_name: taskforce-db
@@ -24,30 +12,18 @@ services:
       - "5432:5432"
     volumes:
       - tfdata:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   postgres-prefect:
     image: postgres:15.2
     container_name: taskforce-prefectdb
     environment:
       - POSTGRES_USER=prefect
-      - POSTGRES_PASSWORD=${PREFECT_PASSWORD}
+      - POSTGRES_PASSWORD=prefect_password
       - POSTGRES_DB=prefect
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - prefectdata:/var/lib/postgresql/data
-
-  nginx:
-    image: nginx:alpine
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-    ports:
-      - "80:80"
+      - postgres_data:/var/lib/postgresql/data
 
   redis:
     image: redis:latest
@@ -56,33 +32,22 @@ services:
     ports:
       - "6379:6379"
 
-  server:
-    image: prefecthq/server:latest
-    environment:
-      - DATABASE_URL=postgres://prefect:${PREFECT_PASSWORD}@taskforce-prefectdb:5432/prefect
-      - REDIS_URL=redis://redis:6379
-      - PREFECT_SERVER__TELEMETRY__ENABLED=false
-
-  # prefect agent start --pool default-agent-pool --work-queue lead-agent
-  agent:
-    image: prefecthq/prefect:latest
-    command: prefect agent start
-    # environment:
-    #   - PREFECT__CLOUD__AGENT__AUTH_TOKEN=${PREFECT__CLOUD__AGENT__AUTH_TOKEN}
-    #   - PREFECT__CLOUD__AGENT__LABELS=[]
-    #   - PREFECT__CLOUD__API=${PREFECT__CLOUD__API}
-    depends_on:
-      - server
-
   registry:
     image: registry:2
+    container_name: taskforce-registry
     ports:
       - 5000:5000
     volumes:
       - registry_data:/var/lib/registry
 
 volumes:
+  tfdata:
   postgres_data:
   registry_data:
-  tfdata:
   prefectdata:
+
+
+networks:
+  default:
+    external:
+      name: taskforce

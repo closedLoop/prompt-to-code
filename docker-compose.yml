@@ -39,6 +39,19 @@ services:
       - 5000:5000
     volumes:
       - registry_data:/var/lib/registry
+  # server:
+  #   image: prefecthq/server:latest
+  #   container_name: taskforce-server
+  #   environment:
+  #     - POSTGRES_URL=postgres://prefect:prefect_password@taskforce-prefectdb:5433/prefect
+  #     - DATABASE_URL=postgres://prefect:prefect_password@taskforce-prefectdb:5433/prefect
+  #     - REDIS_URL=redis://redis:6379
+  #     - PREFECT_SERVER__TELEMETRY__ENABLED=false
+  #   ports:
+  #     - "4200:4200"
+  #   depends_on:
+  #     - postgres-prefect
+  #   restart: always
 
 volumes:
   tfdata:

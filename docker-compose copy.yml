@@ -1,0 +1,108 @@
+version: "3.9"
+services:
+  postgres-taskforce:
+    image: postgres:15.2
+    container_name: taskforce-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: taskforce
+    ports:
+      - "5432:5432"
+    volumes:
+      - tfdata:/var/lib/postgresql/data
+
+  postgres-prefect:
+    image: postgres:15.2
+    container_name: taskforce-prefectdb
+    environment:
+      - POSTGRES_USER=prefect
+      - POSTGRES_PASSWORD=prefect_password
+      - POSTGRES_DB=prefect
+    ports:
+      - "5433:5432"
+    volumes:
+      - prefectdata:/var/lib/postgresql/data
+
+  # traefik:
+  #   image: traefik:v2.6
+  #   container_name: taskforce-traefik
+  #   command:
+  #     - "--api.insecure=true"
+  #     - "--providers.docker=true"
+  #     - "--providers.docker.exposedbydefault=false"
+  #   ports:
+  #     - "80:80"
+  #     - "8080:8080"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+
+  redis:
+    image: redis:latest
+    container_name: taskforce-redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  server:
+    image: prefecthq/server:latest
+    container_name: taskforce-server
+    environment:
+      - DATABASE_URL=postgres://prefect:prefect_password@taskforce-prefectdb:5433/prefect
+      - REDIS_URL=redis://redis:6379
+      - PREFECT_SERVER__TELEMETRY__ENABLED=false
+    ports:
+      - "4200:4200"
+    depends_on:
+      - postgres-prefect
+    restart: always
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.server.rule=Host(`server.example.com`)"
+
+    # prefect agent start --pool default-agent-pool --work-queue lead-agent
+    # agent:
+    #   image: prefecthq/prefect:latest
+    #   command: prefect agent start
+    #   depends_on:
+    #     - server
+    #   labels:
+    #     - "traefik.enable=true"
+    #     - "traefik.http.routers.agent.rule=Host(`agent.example.com`)"
+
+  registry:
+    image: registry:2
+    container_name: taskforce-registry
+    ports:
+      - 5000:5000
+    volumes:
+      - registry_data:/var/lib/registry
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.registry.rule=Host(`registry.example.com`)"
+    # prisma-studio:
+    #   container_name: taskforce-studio
+    #   image: timothyjmiller/prisma-studio:latest
+    #   restart: unless-stopped
+    #   environment:
+    #     POSTGRES_DATABASE: taskforce
+    #     POSTGRES_HOST: taskforce-db
+    #     POSTGRES_USERNAME: ${POSTGRES_USER}
+    #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    #     POSTGRES_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@taskforce-db:5432/taskforce"
+    #   ports:
+    #     - 5555:5555
+    #   depends_on:
+    #     - postgres-taskforce
+
+volumes:
+  postgres_data:
+  registry_data:
+  tfdata:
+  prefectdata:
+
+    # networks:
+    #   default:
+    #     name: taskforce
+    #     external: false

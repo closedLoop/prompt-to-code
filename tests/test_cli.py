@@ -109,6 +109,10 @@ class TestCLICrud(IsolatedAsyncioTestCase):
         submit questions via the CLI
         view tasks via dashboard
         """
+
+        # START SERVER
+        # prefect server start
+        # prefect config set PREFECT_API_URL=http://127.0.0.1:4200/api
         # name: _str
         # email: _str
         # permissions: List[_str]
@@ -264,7 +268,7 @@ class TestCLICrud(IsolatedAsyncioTestCase):
         #     ./taskforce/agent.py:lead_agent_workflow
         # prefect agent start -p 'test-taskforce-00000000'
         # prefect agent start -q 'lead-agent -p test-taskforce-00000000'
-
+        # os.environ["PREFECT_API_URL"] = "http://127.0.0.1:4200/api"
         deployment = await Deployment.build_from_flow(
             flow=lead_agent_workflow,
             name=task_force.name,
@@ -272,14 +276,25 @@ class TestCLICrud(IsolatedAsyncioTestCase):
             .strip(":")
             .strip(),
             work_queue_name="lead-agent",
+            work_pool_name=task_force.name,
             apply=True,
         )
         await deployment.apply()
 
-        print(deployment)
-        print(task_force.name)
-        result = await create_flow_run(deployment.name, 42)
-        print(result)
+        import prefect.server.schemas as schemas
+
+        # Create flow run
+        async with prefect.get_client() as client:
+            deployments = await client.read_deployments(
+                deployment_filter=schemas.filters.DeploymentFilter(
+                    name={"any_": [task_force.name]}
+                )
+            )
+
+        assert len(deployments) == 1 and deployments[0].name == task_force.name
+        deployment = deployments[0]
+        flow_run = await create_flow_run(deployment.id, 42)
+        print(flow_run)
 
         # Do I create workers here?
         # prefect worker start --pool YOUR_WORK_POOL_NAME
@@ -295,10 +310,14 @@ class TestCLICrud(IsolatedAsyncioTestCase):
         # agent.submit_run(self, flow_run: FlowRun) ->
 
         # Launch agents
-        # prefect agent start --pool test-taskforce-59f495e7 --work-queue lead-agent
+        print("run")
+        print(f"prefect agent start --pool {task_force.name} --work-queue lead-agent")
 
 
 async def create_flow_run(deployment_id, x):
+    pass
+
+    # with temporary_settings(updates={PREFECT_API_URL: os.environ["PREFECT_API_URL"]}):
     async with prefect.get_client() as client:
         return await client.create_flow_run_from_deployment(
             deployment_id, parameters={"x": x}

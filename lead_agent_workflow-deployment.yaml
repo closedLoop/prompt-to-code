@@ -1,0 +1,40 @@
+###
+### A complete description of a Prefect Deployment for flow 'lead-agent-workflow'
+###
+name: taskforce_name
+description: purpose_and_description
+version: 43bd2fccee5425c24a75780923e2d093
+# The work queue that will handle this deployment's runs
+work_queue_name: lead-agent
+work_pool_name: test-taskforce-00000000
+tags: []
+parameters: {}
+schedule: null
+is_schedule_active: null
+infra_overrides: {}
+infrastructure:
+  type: process
+  env: {}
+  labels: {}
+  name: null
+  command: null
+  stream_output: true
+  working_dir: null
+  block_type_slug: process
+  _block_type_slug: process
+
+###
+### DO NOT EDIT BELOW THIS LINE
+###
+flow_name: lead-agent-workflow
+manifest_path: null
+storage: null
+path: /home/sean/repos/closedloop/prompt-to-code
+entrypoint: taskforce/agent.py:lead_agent_workflow
+parameter_openapi_schema:
+  title: Parameters
+  type: object
+  properties: {}
+  required: null
+  definitions: null
+timestamp: '2023-05-11T03:00:15.049137+00:00'

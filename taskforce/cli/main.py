@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 from pprint import pprint
@@ -6,6 +7,9 @@ from typing import Annotated
 import dotenv
 import pyfiglet
 import typer
+from pydantic import BaseModel
+
+from taskforce.cli.crud_org import org_app
 
 # from taskforce.agents import AGENTS
 # from taskforce.dashboard import render_dashboard, run_no_dashboard
@@ -15,6 +19,12 @@ from taskforce.version import VERSION
 dotenv.load_dotenv()
 config = TaskForceConfig()
 app = typer.Typer(name="TaskForce")
+app.add_typer(org_app, name="org")
+
+
+class UserInfo(BaseModel):
+    username: str | None = None
+    org: str | None = None
 
 
 def banner():
@@ -46,6 +56,9 @@ def login(
     Authenticates the user and sets the current user as ~/.taskforce/current_user
     """
     if username := (username or os.getlogin()).lower().strip():
+        user = UserInfo(username=username)
+        # TODO get user and org from the server
+
         # Create the ~/.taskforce directory if it doesn't exist
         taskforce_dir = Path.home() / ".taskforce"
         taskforce_dir.mkdir(parents=True, exist_ok=True)
@@ -53,11 +66,43 @@ def login(
         # Set the current user
         current_user_file = taskforce_dir / "current_user"
         with current_user_file.open("w") as f:
-            f.write(username)
+            f.write(user.json())
 
         typer.echo(f"Logged in as {username}")
     else:
         typer.echo("Invalid username")
+
+
+@app.command()
+def logout():
+    """
+    Removes the current user from ~/.taskforce/current_user
+    """
+    taskforce_dir = Path.home() / ".taskforce"
+    current_user_file = taskforce_dir / "current_user"
+
+    if current_user_file.exists():
+        current_user_file.unlink()
+        typer.echo("Logged out successfully")
+    else:
+        typer.echo("No user is currently logged in")
+
+
+@app.command()
+def whoami():
+    """
+    Retrieves the current user from as ~/.taskforce/current_user
+    """
+    taskforce_dir = Path.home() / ".taskforce"
+    current_user_file = taskforce_dir / "current_user"
+    user = None
+    if current_user_file.exists():
+        with current_user_file.open("r") as f:
+            user = UserInfo(**json.loads(f.read().strip()))
+    if user:
+        typer.echo(f"Logged in as {user}")
+    else:
+        typer.echo("Not logged in")
 
 
 @app.command()

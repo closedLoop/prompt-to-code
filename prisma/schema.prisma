@@ -9,91 +9,93 @@ generator client {
 }
 
 model UserRequest {
-  id           String  @id @unique
-  created_at   String
+  id           Int      @id @default(autoincrement())
+  createdAt    DateTime @default(now()) @map(name: "created_at")
   payload      String
   channel      String
   target_agent String
-  User         User?   @relation(fields: [userId], references: [id])
-  userId       String?
+  user         User?    @relation(fields: [userId], references: [id])
+  userId       Int?
 }
 
 model User {
-  id                 String         @id @unique
+  id                 Int            @id @default(autoincrement())
   name               String
-  email              String
+  email              String?        @unique
+  emailVerified      DateTime?      @map("email_verified")
   permissions        String[]
+  image              String?
+  createdAt          DateTime       @default(now()) @map(name: "created_at")
+  updatedAt          DateTime       @updatedAt @map(name: "updated_at")
   request_log        UserRequest[]
   stripe_customer_id String? // Optional field represented by str | None in the original Python model
-  Organizations      Organization[]
-  TaskForce          TaskForce      @relation(fields: [taskForceId], references: [id])
-  OrgOwners          Organization[] @relation("owner_user")
-  taskForceId        String
+  organizations      Organization[]
+  orgowners          Organization[] @relation("owner_user")
+  taskforces         TaskForce[]    @relation()
 }
 
 model AgentConfig {
-  id             String       @id @unique
+  id             Int          @id @default(autoincrement())
   name           String
   config         Json
-  Organization   Organization @relation(fields: [organizationId], references: [id])
-  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId Int
 }
 
 model Cluster {
-  id              String            @id @unique
+  id              Int               @id @default(autoincrement())
   name            String
   spec            String
   config          Json
-  TaskForceLaunch TaskForceLaunch[]
+  taskforcelaunch TaskForceLaunch[]
 }
 
 model Organization {
-  id           String        @id @unique
+  id           Int           @id @default(autoincrement())
   name         String
-  description  String
-  logo         String
-  url          String
-  owner_user   User          @relation("owner_user", references: [id], fields: [owner_userId])
-  // owner_user_id String
+  description  String?
+  logo         String?
+  url          String?
+  owner_user   User?         @relation("owner_user", references: [id], fields: [owner_userId])
   task_forces  TaskForce[]
   users        User[]
   configs      AgentConfig[]
   agents       WorkerAgent[]
-  owner_userId String
+  owner_userId Int?
 }
 
 model Tool {
-  id          String   @id @unique
+  id          Int      @id @default(autoincrement())
   name        String
   description String
   params      Json
   Workflow    Workflow @relation(fields: [workflowId], references: [id])
   Role        Role     @relation(fields: [roleId], references: [id])
-  workflowId  String
-  roleId      String
+  workflowId  Int
+  roleId      Int
 }
 
 model Task {
-  id          String      @id @unique
+  id          Int         @id @default(autoincrement())
   action_item String
-  created_at  DateTime
-  agent_id    String
+  createdAt   DateTime    @default(now()) @map(name: "created_at")
+  agent_id    Int
   parent_task String?
-  AgentWork   AgentWork[]
+  agentwork   AgentWork[]
 }
 
 model AgentDecision {
-  id          String    @id @unique
+  id          Int       @id @default(autoincrement())
   source      String
   target      String
   candidates  String[]
   state       String
-  AgentWork   AgentWork @relation(fields: [agentWorkId], references: [id])
-  agentWorkId String
+  agentwork   AgentWork @relation(fields: [agentworkId], references: [id])
+  agentworkId Int
 }
 
 model AgentAction {
-  id            String    @id @unique
+  id            Int       @id @default(autoincrement())
   prev_step     String
   new_step      String
   state         String
@@ -107,77 +109,76 @@ model AgentAction {
   cpu_time      Float
   memory        Float
   logs          String[]
-  AgentWork     AgentWork @relation(fields: [agentWorkId], references: [id])
-  agentWorkId   String
+  agentwork     AgentWork @relation(fields: [agentworkId], references: [id])
+  agentworkId   Int
 }
 
 model AgentWork {
-  id           String          @id @unique
+  id           Int             @id @default(autoincrement())
   started_at   DateTime
   completed_at DateTime?
   task         Task            @relation(fields: [task_id], references: [id])
-  task_id      String
+  task_id      Int
   result       Json?
   decisions    AgentDecision[]
   actions      AgentAction[]
 }
 
 model Workflow {
-  id             String   @id @unique
+  id             Int      @id @default(autoincrement())
   name           String
   machines       Json
   tools          Tool[]
   output_formats String[]
-  Role           Role     @relation(fields: [roleId], references: [id])
-  roleId         String
+  role           Role     @relation(fields: [roleId], references: [id])
+  roleId         Int
 }
 
 model Role {
-  id          String        @id @unique
+  id          Int           @id @default(autoincrement())
   name        String
   description String
   goal        String
   task_type   String
   workflows   Workflow[]
   tools       Tool[]
-  WorkerAgent WorkerAgent[]
+  workeragent WorkerAgent[]
 }
 
 model WorkerAgent {
-  id             String       @id @unique
-  logo           String
-  name           String
-  bio            String
-  role           Role         @relation(fields: [role_id], references: [id])
-  role_id        String
-  config         Json
-  Organization   Organization @relation(fields: [organizationId], references: [id])
-  TaskForce      TaskForce[]
-  LeadAgent      TaskForce[]  @relation("lead_agent")
-  organizationId String
+  id              Int           @id @default(autoincrement())
+  name            String
+  logo            String?
+  bio             String?
+  role            Role?         @relation(fields: [role_id], references: [id])
+  role_id         Int?
+  config          Json?
+  organization    Organization? @relation(fields: [organization_id], references: [id])
+  taskforce       TaskForce[]
+  leadagent       TaskForce[]   @relation("lead_agent")
+  organization_id Int?
 }
 
 model TaskForce {
-  id              String        @id @unique
+  id              Int           @id @default(autoincrement())
   name            String
   purpose         String
   description     String
-  created_at      DateTime
-  updated_at      DateTime
-  uuid            String?
+  createdAt       DateTime      @default(now()) @map(name: "created_at")
+  updatedAt       DateTime      @updatedAt @map(name: "updated_at")
   worker_agents   WorkerAgent[]
-  lead_agent      WorkerAgent?  @relation("lead_agent", fields: [lead_agent_id], references: [id])
-  lead_agent_id   String?
+  leadagent       WorkerAgent?  @relation("lead_agent", fields: [leadagent_id], references: [id])
+  leadagent_id    Int?
   users           User[]
   final_authority String?
   tools           Json
   comms           Json
-  Organization    Organization  @relation(references: [id], fields: [organizationId])
-  organizationId  String
+  organization    Organization  @relation(references: [id], fields: [organization_id])
+  organization_id Int
 }
 
 model TaskForceResults {
-  id                   String            @id @unique
+  id                   Int               @id @default(autoincrement())
   costs                Json
   metrics              Json
   actions              Json
@@ -192,17 +193,17 @@ model TaskForceResults {
 }
 
 model TaskForceLaunch {
-  id                 String           @id @unique
-  created_at         DateTime
-  started_at         DateTime
+  id                 Int              @id @default(autoincrement())
+  createdAt          DateTime         @default(now()) @map(name: "created_at")
+  updatedAt          DateTime         @updatedAt @map(name: "updated_at")
   status             String
   deadline           DateTime?
   budget             Float?
   config             Json
   environment        Cluster          @relation(fields: [environment_id], references: [id])
-  environment_id     String
+  environment_id     Int
   results            TaskForceResults @relation(fields: [taskForceResultsId], references: [id])
   api_endpoint       String
   chat_endpoint      String
-  taskForceResultsId String
+  taskForceResultsId Int
 }

@@ -71,7 +71,7 @@ We should be able to run these commands from anywhere in the terminal:
     tf set org <org>  # Sets the current organization
     tf get org        # Gets the current organization
 
-    tf orgs  # Lists all organizations the user is a part of
+    tf org list  # Lists all organizations the user is a part of
     tf org <org>  # Shows an organization
     tf org create <org>  # Creates an organization
     tf org delete <org>  # Deletes an organization

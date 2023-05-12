@@ -57,3 +57,34 @@ We know that each worker agent can output tasks in a certain format.
 An WorkerAgent
  - Receives an action_item and is placed in an initial state
  - is given a set of machines to run on
+
+
+# Getting Started
+
+## Installation
+
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install taskforce
+
+## Deployment
+
+    # Launch the servers including the UI, databases and prefect scheduler
+    ./launch.sh
+
+    # Define the taskforces and workflows
+    tf login
+
+    # Deploy agents to execute the workflows on the server
+    tf deploy
+
+    # Send tasks
+
+
+    # Monitor the taskforces using
+    tf watch
+    tf status
+    tf logs
+    tf results
+
+    # Run the taskforces

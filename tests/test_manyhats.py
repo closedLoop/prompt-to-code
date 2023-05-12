@@ -10,7 +10,7 @@ from statemachine import StateMachine
 
 from manyhats.agents.base import API
 from manyhats.agents.trivia import Trivia
-from manyhats.dashboard import configure_logging_for_agent
+from manyhats.dashboard import configure_logging_for_agent, render_dashboard
 
 
 class TestManyHats(unittest.TestCase):
@@ -116,9 +116,9 @@ def run_tasks(action_item: str, hat: str = "trivia", dashboard: bool = False):
 
 if __name__ == "__main__":
     # unittest.main()
-    # output = render_dashboard(
-    #     Trivia(), task="With which game is Santosh Trophy associated?"
-    # )
+    output = render_dashboard(
+        Trivia(), task="With which game is Santosh Trophy associated?"
+    )
 
     # output = render_dashboard(
     #     LMGTFY(), task= "What is the square root of the age of the President of France?"
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     )
 
     # run the flow!
-    run_tasks(action_item)
+    # run_tasks(action_item)
 
     # output = run_no_dashboard(
     #     LMGTFY(), task=action_item

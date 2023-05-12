@@ -326,7 +326,7 @@ Steps (in a markdown-formatted list):
                 description=self.description,
                 question=self.task,
                 statements="\n".join(
-                    [q for q in self.internal_state.statements if q.strip()]
+                    [q for q in (self.internal_state.statements or []) if q.strip()]
                 ),
                 entities="\n".join(
                     [e for e in self.internal_state.entities or [] if e.strip()]
@@ -383,7 +383,7 @@ Answer:
                 description=self.description,
                 question=self.task,
                 statements="\n".join(
-                    [q for q in self.internal_state.statements if q.strip()]
+                    [q for q in (self.internal_state.statements or []) if q.strip()]
                 ),
                 steps="\n".join(steps),
             )

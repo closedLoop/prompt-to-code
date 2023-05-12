@@ -1,10 +1,13 @@
 from pathlib import Path
 
 import dotenv
+from typer import Typer
 
 from manyhats.agents.base import AgentMachine
 from manyhats.dashboard import render_dashboard
 from manyhats.ee.fantasy_sports_agent import FantasySportsAgent
+
+dotenv.load_dotenv()
 
 
 def run_sports_handicaper(task: str | None = None):
@@ -30,6 +33,14 @@ def export_graph(agent):
     agent._graph().write_png(doc_path / f"{agent.name.replace(' ','_').lower()}.png")
 
 
+app = Typer()
+
+
+@app.command()
+def run(task: str | None = None):
+    """Run the sports handicaper"""
+    run_sports_handicaper(task)
+
+
 if __name__ == "__main__":
-    dotenv.load_dotenv()
-    run_sports_handicaper()
+    app()

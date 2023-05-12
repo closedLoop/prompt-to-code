@@ -1,4 +1,11 @@
 # Prompt-to-Code
+
+Current demo
+
+# Running sports trivia
+
+   python manyhats/examples.py --task "Who won the 2004 superbowl"
+
 A Production-Grade Agent suitable for ETL workloads
 
 An automated-test-driven-development tool that converts natural language prompts into executable Python code.

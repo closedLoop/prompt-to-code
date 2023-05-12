@@ -4,26 +4,32 @@ services:
     image: postgres:15.2
     container_name: taskforce-db
     restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: taskforce
+    env_file:
+      - .env
     ports:
       - "5432:5432"
     volumes:
       - tfdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres-prefect:
     image: postgres:15.2
     container_name: taskforce-prefectdb
-    environment:
-      - POSTGRES_USER=prefect
-      - POSTGRES_PASSWORD=prefect_password
-      - POSTGRES_DB=prefect
+    env_file:
+      - .env-server
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:latest
@@ -33,34 +39,39 @@ services:
       - "6379:6379"
 
   registry:
+    # https://docs.docker.com/registry/deploying/
     image: registry:2
     container_name: taskforce-registry
+    env_file:
+      - .env
     ports:
       - 5000:5000
     volumes:
       - registry_data:/var/lib/registry
-  # server:
-  #   image: prefecthq/server:latest
-  #   container_name: taskforce-server
-  #   environment:
-  #     - POSTGRES_URL=postgres://prefect:prefect_password@taskforce-prefectdb:5433/prefect
-  #     - DATABASE_URL=postgres://prefect:prefect_password@taskforce-prefectdb:5433/prefect
-  #     - REDIS_URL=redis://redis:6379
-  #     - PREFECT_SERVER__TELEMETRY__ENABLED=false
-  #   ports:
-  #     - "4200:4200"
-  #   depends_on:
-  #     - postgres-prefect
-  #   restart: always
+
+  ### Prefect Orion API
+  prefect-server:
+    image: prefecthq/prefect:2.10.9-python3.10
+    container_name: taskforce-server
+    restart: always
+    volumes:
+      - prefect:/root/.prefect
+    entrypoint: [ "prefect", "server", "start" ]
+    env_file:
+      - .env-server
+    ports:
+      - 4200:4200
+    depends_on:
+      - postgres-prefect
 
 volumes:
+  prefect:
   tfdata:
   postgres_data:
   registry_data:
-  prefectdata:
 
 
 networks:
   default:
-    external:
-      name: taskforce
+    name: taskforce
+    external: true

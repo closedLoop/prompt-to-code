@@ -12,9 +12,16 @@ docker-compose up -d
 
 get ipaddress of database
 
-    docker inspect --format='{{range .NetworkSettings.Networks}}{{println .IPAddress}}{{end}}'
+    export DATABASE_URL="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' taskforce-db):5432"
 
-    set DATABASE_URL="172.25.0.5:5432"
+    DB_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' taskforce-db)"
+    sed -i 's|DATABASE_URL=localhost:5432|DATABASE_URL='"$DB_IP"':5432|' .env
+
+
+    DB_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' taskforce-db)"
+    sed -i 's|DATABASE_URL=localhost:5432|DATABASE_URL=postgresql://username:password@'"$DB_IP"':5432/database_name|' .env
+
+    set DATABASE_URL="172.25.0.2:5432"
     python -m prisma db push
 
 ### Launch prisma studio

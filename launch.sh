@@ -36,8 +36,6 @@ DB_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{e
 
 ./wait-for-it.sh "$DB_IP" 5432 echo "Database is up"
 
-# ... more commands ...
-
 # UPDATE ENVIRONMENT VARIABLES
 DB_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' taskforce-db)"
 sed -i 's|DATABASE_URL=.*|DATABASE_URL='"$DB_IP"':5432|' .env
@@ -67,13 +65,17 @@ echo "    $ prisma studio"
 echo "To launch the backend run"
 
 # CHECK FOR PREFECT PROFILE and create if necessary
-# PROFILE_EXISTS=$(prefect profile ls | grep taskforce)
+PROFILE_EXISTS=$(prefect profile ls | grep taskforce)
 
-# if [ -z "$PROFILE_EXISTS" ]; then
-#   echo "Prefect profile 'taskforce' does not exist. Creating..."
-#   prefect profile create taskforce
-# else
-#   echo "Prefect profile 'taskforce' already exists. Skipping creation..."
-# fi
+if [ -z "$PROFILE_EXISTS" ]; then
+  echo "Prefect profile 'taskforce' does not exist. Creating..."
+  prefect profile create taskforce
+else
+  echo "Prefect profile 'taskforce' already exists. Skipping creation..."
+fi
+
+API_SERVER_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' taskforce-server)"
+prefect --profile taskforce config set PREFECT_API_URL="http://$API_SERVER_IP:4200/api"
+prefect profile use taskforce
 
 docker compose logs -f --tail 1000
